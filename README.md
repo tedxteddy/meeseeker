@@ -5,11 +5,20 @@ Local-first job search dashboard with real-time job scraping, AI resume parsing,
 ## Quick Start
 
 ```bash
+git clone https://github.com/tedxteddy/career-intel.git
+cd career-intel
 npm install
 npm start
 ```
 
 Opens at `http://localhost:3000` with API server on `http://localhost:3001`.
+
+## How It Works
+
+- **Everything stays in YOUR browser** — localStorage stores jobs, resumes, applications, and API keys
+- **No sign-up, no accounts, no cloud database** — each `npm start` gives you a clean local instance
+- **API keys are yours** — add them in Settings, they never leave your machine (except to the API provider)
+- **Data persists** between sessions in your browser's localStorage
 
 ## Setup (2 minutes)
 
