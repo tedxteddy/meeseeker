@@ -2,6 +2,17 @@ import { useState, useEffect, FormEvent } from 'react'
 import { analyseResume } from '../lib/api'
 import { useResumes } from '../hooks/useData'
 
+interface ExtractedUrl {
+  type: 'linkedin' | 'portfolio' | 'github' | 'website'
+  url: string
+  label: string
+}
+
+interface PortfolioScore {
+  overall: number
+  sections: { name: string; score: number; missing: string[] }
+}
+
 const DESIGN_SKILLS = [
   'Adobe Creative Suite', 'Adobe Photoshop', 'Adobe Illustrator', 'Adobe InDesign',
   'Figma', 'Sketch', 'Typography', 'Layout Design', 'Color Theory',
@@ -51,22 +62,106 @@ async function extractPdfText(file: File): Promise<string> {
   return text
 }
 
+function extractUrls(text: string): ExtractedUrl[] {
+  const urls: ExtractedUrl[] = []
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi
+  const matches = text.match(urlRegex) || []
+
+  for (const url of matches) {
+    const lower = url.toLowerCase()
+    if (lower.includes('linkedin.com')) {
+      urls.push({ type: 'linkedin', url, label: 'LinkedIn' })
+    } else if (lower.includes('github.com')) {
+      urls.push({ type: 'github', url, label: 'GitHub' })
+    } else if (lower.includes('behance.net') || lower.includes('dribbble.com') || lower.includes('portfolio') || lower.includes(' folio')) {
+      urls.push({ type: 'portfolio', url, label: 'Portfolio' })
+    } else if (lower.includes('http') && !lower.includes('linkedin') && !lower.includes('github')) {
+      urls.push({ type: 'website', url, label: 'Website' })
+    }
+  }
+  return urls
+}
+
+function calculatePortfolioScore(text: string): PortfolioScore {
+  const lower = text.toLowerCase()
+  let overall = 0
+  const sections: PortfolioScore['sections'][] = []
+
+  const checks = [
+    { name: 'Contact Info', patterns: [/\bemail\b/i, /\b@/, /\bphone\b/i, /\btel\b/i] },
+    { name: 'Summary', patterns: [/\bsummary\b/i, /\bobjective\b/i, /\babout\s*me\b/i] },
+    { name: 'Experience', patterns: [/\bexperience\b/i, /\bwork\s*history\b/i, /\bemployment\b/i] },
+    { name: 'Education', patterns: [/\beducation\b/i, /\bdegree\b/i, /\buniversity\b/i, /\bcollege\b/i] },
+    { name: 'Skills', patterns: [/\bskills\b/i, /\btechnologies\b/i, /\bcompetencies\b/i] },
+    { name: 'Portfolio Links', patterns: [/behance|dribbble|portfolio|github/i] },
+    { name: 'LinkedIn', patterns: [/linkedin\.com/i] },
+  ]
+
+  let found = 0
+  for (const check of checks) {
+    const matched = check.patterns.some(p => p.test(lower))
+    const missing = check.patterns.filter(p => !p.test(lower)).map(() => check.name)
+    if (matched) found++
+    sections.push({
+      name: check.name,
+      score: matched ? 100 : 0,
+      missing: matched ? [] : [check.name]
+    })
+  }
+
+  overall = Math.round((found / checks.length) * 100)
+
+  return { overall, sections }
+}
+
+function inferIndustry(text: string): string {
+  const lower = text.toLowerCase()
+  if (/\b(design|graphic|visual|brand|creative)\b/.test(lower)) return 'Design'
+  if (/\b(developer|engineer|software|programming)\b/.test(lower)) return 'Engineering'
+  if (/\b(marketing|sales|growth)\b/.test(lower)) return 'Marketing'
+  if (/\b(product|manager|pm)\b/.test(lower)) return 'Product'
+  if (/\b(data|science|analytics)\b/.test(lower)) return 'Data'
+  return 'General'
+}
+
+const STEPS = [
+  { key: 'upload', label: 'Upload' },
+  { key: 'analyze', label: 'Analyze' },
+  { key: 'review', label: 'Review' },
+]
+
 export default function ResumeView() {
   const [text, setText] = useState('')
   const [fileName, setFileName] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
+  const [analysisStep, setAnalysisStep] = useState(0)
   const [error, setError] = useState('')
   const [pdfReady, setPdfReady] = useState(false)
+  const [extractedUrls, setExtractedUrls] = useState<ExtractedUrl[]>([])
+  const [portfolioScore, setPortfolioScore] = useState<PortfolioScore | null>(null)
+  const [detectedIndustry, setDetectedIndustry] = useState('')
+  const [hoveredStep, setHoveredStep] = useState<number | null>(null)
 
-  const { latest: latestResume, saveResume, createResumeVersion, setActiveResume, deleteResume } = useResumes()
+  const { latest: latestResume, saveResume, createResumeVersion, setActiveResume, deleteResume, allResumes } = useResumes()
 
   useEffect(() => {
     loadPdfJs().then(setPdfReady)
     if (latestResume && !text) {
       setText(latestResume.text_content)
       setFileName(latestResume.file_name)
+      setExtractedUrls(extractUrls(latestResume.text_content))
+      setPortfolioScore(calculatePortfolioScore(latestResume.text_content))
+      setDetectedIndustry(inferIndustry(latestResume.text_content))
     }
   }, [latestResume])
+
+  useEffect(() => {
+    if (text && !latestResume) {
+      setExtractedUrls(extractUrls(text))
+      setPortfolioScore(calculatePortfolioScore(text))
+      setDetectedIndustry(inferIndustry(text))
+    }
+  }, [text, latestResume])
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -141,9 +236,12 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
 
     setAnalyzing(true)
     setError('')
+    setAnalysisStep(0)
 
     try {
+      setAnalysisStep(1)
       const result = await analyseResume(text, fileName || 'Pasted resume')
+      setAnalysisStep(2)
       saveResume({
         file_name: fileName || 'Pasted resume',
         text_content: text,
@@ -157,8 +255,9 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
         version: latestResume?.version ?? 1,
         is_active: true,
         parent_id: latestResume?.id ?? null,
-        tags: latestResume?.tags ?? [],
+        tags: [detectedIndustry],
       })
+      setAnalysisStep(3)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to analyse resume')
     } finally {
@@ -189,6 +288,18 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
     (latestResume?.text_content || text).toLowerCase().includes(s.toLowerCase())
   )
 
+  const currentStep = analyzing ? (analysisStep === 1 ? 'Extracting text...' : analysisStep === 2 ? 'Analyzing with AI...' : 'Finalizing...') : null
+
+  const getStepProgress = () => {
+    if (!analyzing) return null
+    if (analysisStep === 1) return { current: 0, total: 3 }
+    if (analysisStep === 2) return { current: 1, total: 3 }
+    if (analysisStep === 3) return { current: 2, total: 3 }
+    return null
+  }
+
+  const progress = getStepProgress()
+
   const renderSkeleton = (height: number) => (
     <div style={{
       height: `${height}px`,
@@ -198,6 +309,30 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
       animation: 'loading 1.5s infinite',
       marginBottom: 8
     }}></div>
+  )
+
+  const renderStepIndicator = () => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+      {STEPS.map((step, i) => (
+        <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={() => setHoveredStep(i)} onMouseLeave={() => setHoveredStep(null)}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: i < (progress?.current || 0) ? 'var(--green)' : i === (progress?.current || 0) ? 'var(--accent)' : 'var(--surface-2)',
+            border: i === (progress?.current || 0) ? '2px solid var(--accent)' : '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 600, color: i <= (progress?.current || 0) ? '#fff' : 'var(--text-2)',
+            transition: 'all 0.3s'
+          }}>
+            {i < (progress?.current || 0) ? '✓' : i + 1}
+          </div>
+          <span style={{ fontSize: 11, color: i === (progress?.current || 0) ? 'var(--accent)' : 'var(--text-2)', fontWeight: i === (progress?.current || 0) ? 600 : 400 }}>
+            {step.label}
+          </span>
+          {i < STEPS.length - 1 && <div style={{ width: 24, height: 1, background: i < (progress?.current || 0) ? 'var(--green)' : 'var(--border)' }} />}
+        </div>
+      ))}
+      {currentStep && <span style={{ fontSize: 11, color: 'var(--text-2)', marginLeft: 8 }}>{currentStep}</span>}
+    </div>
   )
 
   return (
@@ -277,14 +412,40 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
       )}
 
       {!latestResume && !text && (
-        <div className="empty-state" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <div className="icon" style={{ fontSize: 48, marginBottom: 16 }}>&#128196;</div>
-          <h3 style={{ marginBottom: 12 }}>No resume analysed yet</h3>
-          <p style={{ color: 'var(--text-2)', marginBottom: 24, maxWidth: 400, marginLeft: 'auto', marginRight: 'auto' }}>
-            Upload your resume or paste the text below to get started with ATS scoring and skill gap analysis.
+        <div className="empty-state" style={{
+          textAlign: 'center', padding: '48px 20px',
+          background: 'linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%)',
+          borderRadius: 16, border: '1px dashed var(--border)', marginBottom: 20
+        }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--accent) 0%, #ff8f5a 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 20px', fontSize: 36
+          }}>&#128196;</div>
+          <h3 style={{ marginBottom: 10, fontSize: 18, fontWeight: 700 }}>Start with your resume</h3>
+          <p style={{
+            color: 'var(--text-2)', marginBottom: 24, maxWidth: 400, marginLeft: 'auto', marginRight: 'auto',
+            lineHeight: 1.6
+          }}>
+            Upload your resume to get AI-powered ATS scoring, skill gap analysis, and personalized job matches.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-            <button className="btn btn-primary" onClick={handleLoadSample} disabled={analyzing}>
+          <div style={{
+            display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap',
+            marginBottom: 20
+          }}>
+            {['ATS Scoring', 'Skill Analysis', 'Job Matching', 'Keyword Optimization'].map((feature, i) => (
+              <span key={i} style={{
+                fontSize: 11, padding: '6px 12px', borderRadius: 20,
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                color: 'var(--text-2)'
+              }}>
+                {feature}
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+            <button className="btn btn-primary" onClick={handleLoadSample} disabled={analyzing} style={{ padding: '10px 24px' }}>
               &#128202; Try with Sample Resume
             </button>
             <button
@@ -295,19 +456,43 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
               &#128196; Upload PDF/TXT
             </button>
           </div>
+          <p style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 16 }}>
+            Supports PDF, TXT, and MD files. Your data stays in your browser.
+          </p>
         </div>
       )}
 
-      {!latestResume && (
+      {!latestResume && analyzing && (
         <div style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 16, padding: 24, marginTop: 16, textAlign: 'center'
+        }}>
+          {renderStepIndicator()}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{
+              width: 60, height: 60, borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--accent) 0%, #ff8f5a 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto', fontSize: 28, animation: 'pulse 1.5s infinite'
+            }}>&#128640;</div>
+          </div>
+          <p style={{ color: 'var(--text-2)', fontSize: 13 }}>
+            {analysisStep === 1 && 'Reading and parsing your resume...'}
+            {analysisStep === 2 && 'Running AI analysis for ATS score and skills...'}
+            {analysisStep === 3 && 'Generating recommendations...'}
+          </p>
+        </div>
+      )}
+
+      {!latestResume && !text && !analyzing && (
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 12, padding: 16, marginBottom: 16
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <h3 style={{ fontSize: 14, margin: 0 }}>Paste your resume</h3>
+            <h3 style={{ fontSize: 14, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>&#9998;</span> Paste your resume
+            </h3>
             <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
               {text.length} characters
             </span>
@@ -315,31 +500,117 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
           <textarea
             value={text}
             onChange={handleTextChange}
-            placeholder="Paste your resume text here..."
+            placeholder="Or paste your resume text here to get started..."
             style={{
               width: '100%',
-              minHeight: 120,
+              minHeight: 160,
               padding: 12,
               border: '1px solid var(--border)',
               borderRadius: 8,
               fontFamily: 'inherit',
-              fontSize: 14,
-              resize: 'vertical'
+              fontSize: 13,
+              resize: 'vertical',
+              background: 'var(--bg)',
+              color: 'var(--text)',
+              lineHeight: 1.6
             }}
           />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
+              {text.split(/\s+/).filter(Boolean).length} words detected
+            </span>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={handleAnalyse}
+              disabled={!text.trim()}
+            >
+              Analyze Resume
+            </button>
+          </div>
         </div>
       )}
 
       {latestResume && (
         <>
-          <div className="stats-bar">
-            <span>ATS Score: <strong style={{ color: latestResume.ats_score >= 60 ? 'var(--green)' : latestResume.ats_score >= 40 ? 'var(--orange)' : 'var(--red)' }}>{latestResume.ats_score}/100</strong></span>
-            <span>Best Fit: <strong>{latestResume.best_fit}</strong></span>
-            <span className="stat-chip">{getFoundSkills.length} design skills detected</span>
+          <div className="stats-bar" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{
+                background: latestResume.ats_score >= 60 ? 'rgba(0,214,143,0.12)' : latestResume.ats_score >= 40 ? 'rgba(255,159,67,0.12)' : 'rgba(238,90,111,0.12)',
+                padding: '12px 20px', borderRadius: 12, border: `1px solid ${latestResume.ats_score >= 60 ? 'rgba(0,214,143,0.3)' : latestResume.ats_score >= 40 ? 'rgba(255,159,67,0.3)' : 'rgba(238,90,111,0.3)'}`,
+                textAlign: 'center', minWidth: 100
+              }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: latestResume.ats_score >= 60 ? 'var(--green)' : latestResume.ats_score >= 40 ? 'var(--orange)' : 'var(--red)' }}>
+                  {latestResume.ats_score}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>ATS Score</div>
+              </div>
+              {detectedIndustry && (
+                <div style={{ background: 'var(--surface-2)', padding: '12px 20px', borderRadius: 12, border: '1px solid var(--border)', textAlign: 'center', minWidth: 100 }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>{detectedIndustry}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Industry</div>
+                </div>
+              )}
+              {portfolioScore && (
+                <div style={{ background: portfolioScore.overall >= 70 ? 'rgba(0,214,143,0.12)' : portfolioScore.overall >= 40 ? 'rgba(255,159,67,0.12)' : 'rgba(238,90,111,0.12)', padding: '12px 20px', borderRadius: 12, border: `1px solid ${portfolioScore.overall >= 70 ? 'rgba(0,214,143,0.3)' : portfolioScore.overall >= 40 ? 'rgba(255,159,67,0.3)' : 'rgba(238,90,111,0.3)'}`, textAlign: 'center', minWidth: 100 }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: portfolioScore.overall >= 70 ? 'var(--green)' : portfolioScore.overall >= 40 ? 'var(--orange)' : 'var(--red)' }}>
+                    {portfolioScore.overall}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Profile</div>
+                </div>
+              )}
+            </div>
           </div>
+
+          {extractedUrls.length > 0 && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <h3 style={{ fontSize: 13, marginBottom: 12 }}>&#128279; Detected Links</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {extractedUrls.map((url, i) => (
+                  <a key={i} href={url.url} target="_blank" rel="noreferrer" style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 8, fontSize: 11,
+                    background: url.type === 'linkedin' ? 'rgba(10,102,194,0.15)' : url.type === 'github' ? 'rgba(255,255,255,0.1)' : 'rgba(255,107,53,0.15)',
+                    border: `1px solid ${url.type === 'linkedin' ? 'rgba(10,102,194,0.4)' : url.type === 'github' ? 'rgba(255,255,255,0.2)' : 'rgba(255,107,53,0.4)'}`,
+                    color: 'var(--text)', textDecoration: 'none'
+                  }}>
+                    {url.type === 'linkedin' && '&#128100;'}
+                    {url.type === 'github' && '&#128187;'}
+                    {url.type === 'portfolio' && '&#127912;'}
+                    {url.type === 'website' && '&#127760;'}
+                    <span style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.url}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {allResumes.length > 1 && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <h3 style={{ fontSize: 13, marginBottom: 10 }}>&#128198; Version History</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {allResumes.map((r, i) => (
+                  <button
+                    key={r.id}
+                    onClick={() => setActiveResume(r.id)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 8, fontSize: 11,
+                      background: r.is_active ? 'var(--accent)' : 'var(--surface-2)',
+                      border: r.is_active ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      color: r.is_active ? '#fff' : 'var(--text-2)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    v{r.version} {r.is_active && '✓'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {getFoundSkills.length > 0 && (
             <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 8 }}>Detected Skills ({getFoundSkills.length})</div>
               <div className="skills-cloud">
                 {getFoundSkills.map((s, i) => (
                   <span key={i} className="skill-tag matched">{s}</span>
@@ -350,14 +621,20 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
 
           {getSkills.length > 0 && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-              <h3 style={{ fontSize: 13, marginBottom: 12 }}>Skill Scores</h3>
+              <h3 style={{ fontSize: 13, marginBottom: 12 }}>&#9878; Skill Proficiency</h3>
               {getSkills.map((skill: { name: string; current: number; target: number }, i: number) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '160px 1fr 40px', gap: 10, alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
-                  <strong>{skill.name}</strong>
-                  <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${skill.current}%`, background: `linear-gradient(90deg, var(--green), var(--blue))`, borderRadius: 3, transition: 'width 0.4s' }} />
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 40px', gap: 10, alignItems: 'center', marginBottom: 10, fontSize: 12 }}>
+                  <strong style={{ fontSize: 11 }}>{skill.name}</strong>
+                  <div style={{ height: 8, borderRadius: 4, background: 'var(--border)', overflow: 'hidden', position: 'relative' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${skill.current}%`,
+                      background: skill.current >= 70 ? 'linear-gradient(90deg, var(--green), #00b377)' : skill.current >= 40 ? 'linear-gradient(90deg, var(--orange), #ffb347)' : 'linear-gradient(90deg, var(--red), #ff7b7b)',
+                      borderRadius: 4,
+                      transition: 'width 0.4s'
+                    }} />
                   </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{skill.current}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-2)', textAlign: 'right' }}>{skill.current}%</span>
                 </div>
               ))}
             </div>
@@ -365,14 +642,14 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
 
           {getBreakdown.length > 0 && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-              <h3 style={{ fontSize: 13, marginBottom: 12 }}>ATS Breakdown</h3>
+              <h3 style={{ fontSize: 13, marginBottom: 12 }}>&#128202; ATS Factor Breakdown</h3>
               {getBreakdown.map((item: { label: string; score: number; note: string }, i: number) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', padding: '10px 0', borderBottom: i < getBreakdown.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 12 }}>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <strong>{item.label}</strong>
-                    <p style={{ color: 'var(--text-2)', marginTop: 3, fontSize: 11 }}>{item.note}</p>
+                    <p style={{ color: 'var(--text-2)', marginTop: 3, fontSize: 11, lineHeight: 1.5 }}>{item.note}</p>
                   </div>
-                  <span className={`match-score ${item.score >= 60 ? 'match-high' : item.score >= 40 ? 'match-mid' : 'match-low'}`}>{item.score}</span>
+                  <span className={`match-score ${item.score >= 60 ? 'match-high' : item.score >= 40 ? 'match-mid' : 'match-low'}`} style={{ marginLeft: 12 }}>{item.score}</span>
                 </div>
               ))}
             </div>
