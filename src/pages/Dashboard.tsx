@@ -11,6 +11,8 @@ import Onboarding from '../components/Onboarding'
 import { getApiKeyStatus } from '../lib/api'
 import { getNotionConfig, syncJobsToNotion, updateNotionApplication } from '../lib/notion'
 
+import Logo from '../components/Logo'
+
 const TABS = [
   { key: 'jobs', label: 'Jobs' },
   { key: 'resume', label: 'Resume Match' },
@@ -63,7 +65,7 @@ export default function Dashboard() {
       <div className="app-layout">
       <header>
         <div className="logo">
-          <div className="logo-icon">MS</div>
+          <Logo size={34} />
           <span>Meeseeker</span>
           <small>Job Tracker</small>
         </div>
