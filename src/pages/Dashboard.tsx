@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useJobs, useApplications, useNetworkTargets } from '../hooks/useData'
 import JobsView from '../components/JobsView'
 import ResumeView from '../components/ResumeView'
@@ -7,6 +7,7 @@ import PipelineView from '../components/PipelineView'
 import NetworkView from '../components/NetworkView'
 import GrowthView from '../components/GrowthView'
 import Settings from '../components/Settings'
+import Onboarding from '../components/Onboarding'
 import { getApiKeyStatus } from '../lib/api'
 
 const TABS = [
@@ -21,14 +22,24 @@ const TABS = [
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('jobs')
   const [showSettings, setShowSettings] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const { jobs, addJob, deleteJob, refresh: refreshJobs } = useJobs()
   const { applications, addApplication, updateStage, deleteApplication } = useApplications()
   const { targets, logSent, logReply } = useNetworkTargets()
   const apiStatus = getApiKeyStatus()
   const activeApis = Object.values(apiStatus).filter(Boolean).length
 
+  useEffect(() => {
+    const completed = localStorage.getItem('onboarding_completed')
+    if (!completed) {
+      setShowOnboarding(true)
+    }
+  }, [])
+
   return (
-    <div className="app-layout">
+    <>
+      {showOnboarding && <Onboarding onComplete={() => setShowOnboarding(false)} />}
+      <div className="app-layout">
       <header>
         <div className="logo">
           <div className="logo-icon">YC</div>
