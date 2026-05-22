@@ -128,6 +128,7 @@ export default function Dashboard() {
       </div>
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} onNotionSync={handleNotionSync} />}
-    </div>
+      </div>
+    </>
   )
 }
