@@ -32,12 +32,20 @@ interface JobsViewProps {
 
 const PAGE_SIZE = 10
 
+const WORK_ARRANGEMENTS = [
+  { key: 'any', label: 'Any', icon: '&#9899;' },
+  { key: 'remote', label: 'Remote', icon: '&#127760;' },
+  { key: 'hybrid', label: 'Hybrid', icon: '&#127795;' },
+  { key: 'office', label: 'Office', icon: '&#127970;' },
+] as const
+
 export default function JobsView({ jobs, applications, onAddApplication, onDeleteJob, onJobImported }: JobsViewProps) {
   const apiStatus = getApiKeyStatus()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchLocation, setSearchLocation] = useState('')
   const [searchRemote, setSearchRemote] = useState(true)
   const [searchSource, setSearchSource] = useState('jsearch')
+  const [workArrangement, setWorkArrangement] = useState<'any' | 'remote' | 'hybrid' | 'office'>('any')
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [selectedJob, setSelectedJob] = useState<string | null>(null)
@@ -105,6 +113,13 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
     const haystack = `${job.role} ${job.company} ${job.location} ${job.required_skills.join(' ')}`.toLowerCase()
     if (filterQuery && !haystack.includes(filterQuery.toLowerCase())) return false
     if (filterSeniority === 'remote' && !job.tags.includes('remote')) return false
+    if (workArrangement !== 'any') {
+      const jobLocationLower = job.location.toLowerCase()
+      const jobTags = job.tags.map(t => t.toLowerCase())
+      if (workArrangement === 'remote' && !jobTags.includes('remote') && !jobLocationLower.includes('remote')) return false
+      if (workArrangement === 'hybrid' && !jobLocationLower.includes('hybrid') && !jobLocationLower.includes('flex')) return false
+      if (workArrangement === 'office' && (jobTags.includes('remote') || jobLocationLower.includes('remote') || jobLocationLower.includes('hybrid'))) return false
+    }
     return true
   })
 
@@ -209,10 +224,27 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
           placeholder="Location (optional)"
           style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 11, outline: 'none', minWidth: 120 }}
         />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={searchRemote} onChange={e => setSearchRemote(e.target.checked)} />
-          Remote only
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-2)', marginRight: 4 }}>Work:</span>
+          {WORK_ARRANGEMENTS.map(arr => (
+            <button
+              key={arr.key}
+              type="button"
+              onClick={() => setWorkArrangement(arr.key)}
+              style={{
+                padding: '6px 10px', borderRadius: 6, border: 'none', fontSize: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontWeight: 500,
+                background: workArrangement === arr.key ? 'var(--accent)' : 'var(--surface-2)',
+                color: workArrangement === arr.key ? '#fff' : 'var(--text-2)',
+                transition: 'all 0.15s'
+              }}
+              title={arr.label}
+            >
+              <span dangerouslySetInnerHTML={{ __html: arr.icon }} style={{ marginRight: 3 }} />
+              {arr.label}
+            </button>
+          ))}
+        </div>
         <button type="submit" className="btn btn-primary btn-sm" disabled={searching}>
           {searching ? <><span className="spinner"></span> Searching...</> : 'Search'}
         </button>
@@ -266,12 +298,36 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
             <option value="">All</option>
             <option value="remote">Remote only</option>
           </select>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {WORK_ARRANGEMENTS.slice(1).map(arr => (
+              <button
+                key={arr.key}
+                type="button"
+                onClick={() => {
+                  setWorkArrangement(workArrangement === arr.key ? 'any' : arr.key)
+                  setCurrentPage(1)
+                }}
+                style={{
+                  padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 10, cursor: 'pointer',
+                  fontFamily: 'inherit', fontWeight: 500,
+                  background: workArrangement === arr.key ? 'var(--accent)' : 'transparent',
+                  color: workArrangement === arr.key ? '#fff' : 'var(--text-2)',
+                  transition: 'all 0.15s'
+                }}
+                title={arr.label}
+              >
+                <span dangerouslySetInnerHTML={{ __html: arr.icon }} style={{ marginRight: 3 }} />
+                {arr.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="stats-bar">
         <span>Showing <strong>{filteredJobs.length}</strong> tracked jobs</span>
         <span className="stat-chip">Remote <strong>{jobs.filter(j => j.tags.includes('remote')).length}</strong></span>
+        {workArrangement !== 'any' && <span className="stat-chip" style={{ background: 'var(--accent)', color: '#fff' }}>Filter: {workArrangement}</span>}
       </div>
 
       {pageJobs.length === 0 ? (
