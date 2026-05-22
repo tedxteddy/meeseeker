@@ -1,5 +1,4 @@
-const NOTION_API_BASE = 'https://api.notion.com/v1'
-const NOTION_VERSION = '2022-06-28'
+const API_BASE = '/api'
 
 export interface NotionConfig {
   enabled: boolean
@@ -35,11 +34,11 @@ export interface NotionApplication {
   updated_at: string
 }
 
-function getNotionHeaders(apiKey: string) {
+function proxyHeaders(apiKey: string) {
   return {
-    'Authorization': `Bearer ${apiKey}`,
-    'Notion-Version': NOTION_VERSION,
     'Content-Type': 'application/json',
+    'X-Notion-Token': apiKey,
+    'X-Notion-Version': '2022-06-28',
   }
 }
 
@@ -63,32 +62,28 @@ export async function verifyNotionConnection(apiKey: string, databaseId: string)
   }
 
   try {
-    const response = await fetch(`${NOTION_API_BASE}/databases/${databaseId}`, {
-      headers: getNotionHeaders(apiKey),
+    const response = await fetch(`${API_BASE}/notion/databases/${databaseId}`, {
+      headers: proxyHeaders(apiKey),
     })
 
     if (!response.ok) {
       const error = await response.json()
-      if (response.status === 401) {
-        return { success: false, error: 'Invalid API key' }
-      }
-      if (response.status === 404) {
-        return { success: false, error: 'Database not found. Make sure the database exists and is shared with your integration.' }
-      }
+      if (response.status === 401) return { success: false, error: 'Invalid API key' }
+      if (response.status === 404) return { success: false, error: 'Database not found. Make sure the database exists and is shared with your integration.' }
       return { success: false, error: error.message || 'Failed to connect to Notion' }
     }
 
     return { success: true }
-  } catch (err) {
+  } catch {
     return { success: false, error: 'Network error. Check your connection.' }
   }
 }
 
 export async function createNotionJobPage(apiKey: string, databaseId: string, job: NotionJob): Promise<{ pageId: string } | null> {
   try {
-    const response = await fetch(`${NOTION_API_BASE}/pages`, {
+    const response = await fetch(`${API_BASE}/notion/pages`, {
       method: 'POST',
-      headers: getNotionHeaders(apiKey),
+      headers: proxyHeaders(apiKey),
       body: JSON.stringify({
         parent: { database_id: databaseId },
         properties: {
@@ -109,17 +104,9 @@ export async function createNotionJobPage(apiKey: string, databaseId: string, jo
           'imported_at': { date: { start: job.imported_at } },
         },
         children: job.description ? [
-          {
-            object: 'block',
-            type: 'heading_2',
-            heading_2: { rich_text: [{ text: { content: 'Job Description' } }] }
-          },
-          {
-            object: 'block',
-            type: 'paragraph',
-            paragraph: { rich_text: [{ text: { content: job.description.slice(0, 2000) } }] }
-          }
-        ] : []
+          { object: 'block', type: 'heading_2', heading_2: { rich_text: [{ text: { content: 'Job Description' } }] } },
+          { object: 'block', type: 'paragraph', paragraph: { rich_text: [{ text: { content: job.description.slice(0, 2000) } }] } },
+        ] : [],
       }),
     })
 
@@ -140,20 +127,16 @@ export async function updateNotionApplication(apiKey: string, pageId: string, up
   try {
     const properties: Record<string, unknown> = {}
 
-    if (updates.stage) {
-      properties['Stage'] = { select: { name: updates.stage } }
-    }
+    if (updates.stage) properties['Stage'] = { select: { name: updates.stage } }
     if (updates.applied_at) {
       properties['Applied'] = { checkbox: true }
       properties['Applied Date'] = { date: { start: updates.applied_at } }
     }
-    if (updates.notes !== undefined) {
-      properties['Notes'] = { rich_text: [{ text: { content: updates.notes } }] }
-    }
+    if (updates.notes !== undefined) properties['Notes'] = { rich_text: [{ text: { content: updates.notes } }] }
 
-    const response = await fetch(`${NOTION_API_BASE}/pages/${pageId}`, {
+    const response = await fetch(`${API_BASE}/notion/pages/${pageId}`, {
       method: 'PATCH',
-      headers: getNotionHeaders(apiKey),
+      headers: proxyHeaders(apiKey),
       body: JSON.stringify({ properties }),
     })
 
@@ -166,12 +149,12 @@ export async function updateNotionApplication(apiKey: string, pageId: string, up
 
 export async function searchNotionJobs(apiKey: string, databaseId: string): Promise<Array<{ notionPageId: string; job: NotionJob }>> {
   try {
-    const response = await fetch(`${NOTION_API_BASE}/databases/${databaseId}/query`, {
+    const response = await fetch(`${API_BASE}/notion/databases/${databaseId}/query`, {
       method: 'POST',
-      headers: getNotionHeaders(apiKey),
+      headers: proxyHeaders(apiKey),
       body: JSON.stringify({
         sorts: [{ timestamp: 'created_time', direction: 'descending' }],
-        page_size: 100
+        page_size: 100,
       }),
     })
 
@@ -185,39 +168,31 @@ export async function searchNotionJobs(apiKey: string, databaseId: string): Prom
 
     for (const page of data.results) {
       const props = page.properties
-
-      const extractText = (prop: any): string => {
+      const text = (prop: any): string => {
         if (!prop) return ''
         if (prop.type === 'title') return prop.title?.map((t: any) => t.plain_text).join('') || ''
         if (prop.type === 'rich_text') return prop.rich_text?.map((t: any) => t.plain_text).join('') || ''
         return ''
       }
 
-      const extractSelect = (prop: any): string => prop?.select?.name || ''
-      const extractNumber = (prop: any): number => prop?.number ?? 0
-      const extractMultiSelect = (prop: any): string[] => prop?.multi_select?.map((s: any) => s.name) || []
-      const extractCheckbox = (prop: any): boolean => prop?.checkbox ?? false
-      const extractUrl = (prop: any): string => prop?.url || ''
-      const extractDate = (prop: any): string | null => prop?.date?.start || null
-
-      const job: NotionJob = {
+      jobs.push({
         notionPageId: page.id,
-        role: extractText(props['Role']),
-        company: extractText(props['Company']),
-        location: extractText(props['Location']),
-        description: '',
-        source: extractSelect(props['Source']),
-        source_url: extractUrl(props['Source URL']),
-        compensation: extractText(props['Compensation']) || null,
-        required_skills: extractMultiSelect(props['Skills Required']),
-        fit_score: extractNumber(props['Fit Score']),
-        growth_score: extractNumber(props['Growth Score']),
-        probability: extractSelect(props['Probability']),
-        tags: extractMultiSelect(props['Tags']),
-        imported_at: extractDate(props['imported_at']) || new Date().toISOString(),
-      }
-
-      jobs.push({ notionPageId: page.id, job })
+        job: {
+          role: text(props['Role']),
+          company: text(props['Company']),
+          location: text(props['Location']),
+          description: '',
+          source: props['Source']?.select?.name || '',
+          source_url: props['Source URL']?.url || '',
+          compensation: text(props['Compensation']) || null,
+          required_skills: props['Skills Required']?.multi_select?.map((s: any) => s.name) || [],
+          fit_score: props['Fit Score']?.number ?? 0,
+          growth_score: props['Growth Score']?.number ?? 0,
+          probability: props['Probability']?.select?.name || '',
+          tags: props['Tags']?.multi_select?.map((s: any) => s.name) || [],
+          imported_at: props['imported_at']?.date?.start || new Date().toISOString(),
+        },
+      })
     }
 
     return jobs
@@ -233,11 +208,8 @@ export async function syncJobsToNotion(apiKey: string, databaseId: string, jobs:
 
   for (const job of jobs) {
     const result = await createNotionJobPage(apiKey, databaseId, job)
-    if (result) {
-      synced++
-    } else {
-      failed++
-    }
+    if (result) synced++
+    else failed++
   }
 
   return { synced, failed }

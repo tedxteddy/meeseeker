@@ -163,7 +163,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
           {step.key === 'done' && (
             <div style={{ textAlign: 'center' }}>
-              {latest ? (
+              {latest && latest.ats_score > 0 ? (
                 <div style={{
                   padding: '16px', background: 'rgba(0,214,143,0.1)', borderRadius: 10,
                   border: '1px solid rgba(0,214,143,0.3)', marginBottom: 16
@@ -199,7 +199,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
             {!isFirstStep ? (
               <button className="btn btn-outline" onClick={handleBack}>
-                &#8592; Back
+                ← Back
               </button>
             ) : (
               <button className="btn btn-outline" onClick={handleSkip} style={{ opacity: 0.7 }}>
@@ -207,7 +207,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               </button>
             )}
             <button className="btn btn-primary" onClick={handleNext} style={{ flex: 1, maxWidth: 200 }}>
-              {isLastStep ? "Let's Go!" : 'Continue &#8594;'}
+              {isLastStep ? "Let's Go!" : 'Continue →'}
             </button>
           </div>
         </div>

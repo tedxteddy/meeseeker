@@ -8,6 +8,28 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 
+// Proxy for Notion API (bypasses browser CORS)
+app.all('/api/notion/{*splat}', (req, res) => {
+  const notionUrl = `https://api.notion.com/v1/${req.params.splat}`
+
+  fetch(notionUrl, {
+    method: req.method,
+    headers: {
+      'Authorization': `Bearer ${req.headers['x-notion-token'] || ''}`,
+      'Notion-Version': req.headers['x-notion-version'] || '2022-06-28',
+      'Content-Type': 'application/json',
+    },
+    body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
+  })
+    .then(async (response) => {
+      const data = await response.json()
+      res.status(response.status).json(data)
+    })
+    .catch((error) => {
+      res.status(500).json({ error: error.message || 'Notion proxy error' })
+    })
+})
+
 function getKeys(req) {
   return {
     jsearch: req.body.apiKeys?.jsearch || process.env.JSEARCH_API_KEY || '',
