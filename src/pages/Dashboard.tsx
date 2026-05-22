@@ -9,6 +9,7 @@ import GrowthView from '../components/GrowthView'
 import Settings from '../components/Settings'
 import Onboarding from '../components/Onboarding'
 import { getApiKeyStatus } from '../lib/api'
+import { getNotionConfig, syncJobsToNotion, updateNotionApplication } from '../lib/notion'
 
 const TABS = [
   { key: 'jobs', label: 'Jobs' },
@@ -23,11 +24,14 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('jobs')
   const [showSettings, setShowSettings] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [notionSyncing, setNotionSyncing] = useState(false)
+  const [notionStatus, setNotionStatus] = useState<{ synced: number; failed: number } | null>(null)
   const { jobs, addJob, deleteJob, refresh: refreshJobs } = useJobs()
   const { applications, addApplication, updateStage, deleteApplication } = useApplications()
   const { targets, logSent, logReply } = useNetworkTargets()
   const apiStatus = getApiKeyStatus()
   const activeApis = Object.values(apiStatus).filter(Boolean).length
+  const notionConfig = getNotionConfig()
 
   useEffect(() => {
     const completed = localStorage.getItem('onboarding_completed')
@@ -36,20 +40,54 @@ export default function Dashboard() {
     }
   }, [])
 
+  async function handleNotionSync() {
+    if (!notionConfig.enabled || !notionConfig.apiKey || !notionConfig.databaseId) return
+
+    setNotionSyncing(true)
+    setNotionStatus(null)
+
+    try {
+      const result = await syncJobsToNotion(notionConfig.apiKey, notionConfig.databaseId, jobs)
+      setNotionStatus(result)
+      setTimeout(() => setNotionStatus(null), 5000)
+    } catch (err) {
+      console.error('Notion sync error:', err)
+    } finally {
+      setNotionSyncing(false)
+    }
+  }
+
   return (
     <>
       {showOnboarding && <Onboarding onComplete={() => setShowOnboarding(false)} />}
       <div className="app-layout">
       <header>
         <div className="logo">
-          <div className="logo-icon">YC</div>
-          <span>YC Job Board</span>
-          <small>Remote Worldwide</small>
+          <div className="logo-icon">MS</div>
+          <span>Meeseeker</span>
+          <small>Job Tracker</small>
         </div>
         <div className="header-actions">
           <span className="badge"><strong>{jobs.length}</strong> tracked</span>
           <span className="badge"><strong>{applications.length}</strong> applied</span>
           <span className="badge">{activeApis}/3 APIs</span>
+          {notionConfig.enabled && (
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={handleNotionSync}
+              disabled={notionSyncing || jobs.length === 0}
+              style={{ borderColor: 'var(--blue)', color: notionSyncing ? 'var(--text-2)' : 'var(--blue)' }}
+              title="Sync to Notion"
+            >
+              {notionSyncing ? (
+                <><span className="spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }}></span> Syncing...</>
+              ) : notionStatus ? (
+                <>{notionStatus.synced} synced</>
+              ) : (
+                <>Notion &#8644;</>
+              )}
+            </button>
+          )}
           <button className="btn btn-outline btn-sm" onClick={() => setShowSettings(true)}>
             &#9881; Settings
           </button>
@@ -89,7 +127,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showSettings && <Settings onClose={() => setShowSettings(false)} onNotionSync={handleNotionSync} />}
     </div>
   )
 }
