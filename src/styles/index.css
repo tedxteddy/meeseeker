@@ -578,9 +578,10 @@ header {
 
 /* Responsive */
 @media (max-width: 768px) {
-  header { padding: 0 16px; }
-  .container { padding: 16px; }
-  .nav-tabs { padding: 0 16px; }
+  header { padding: 0 16px; height: 52px; }
+  .header-actions .badge { display: none; }
+  .container { padding: 16px 14px 80px; }
+  .nav-tabs { display: none; }
   .controls { flex-direction: column; }
   .search-wrap { min-width: 100%; }
   .filter-group select { flex: 1; min-width: 0; }
@@ -592,9 +593,52 @@ header {
 
 @media (max-width: 480px) {
   .detail-grid { grid-template-columns: 1fr; }
-  .nav-tabs { padding: 0 14px; }
+  .nav-tabs { display: none; }
   .floating-add-btn { display: none; }
 }
+
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 4px 0 env(safe-area-inset-bottom, 4px);
+  justify-content: space-around;
+}
+
+@media (max-width: 768px) {
+  .bottom-nav { display: flex; }
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 8px;
+  min-width: 48px;
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 18px;
+  cursor: pointer;
+  transition: color 0.15s;
+  line-height: 1;
+}
+
+.bottom-nav-item span {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.bottom-nav-item:hover { color: var(--text); }
+.bottom-nav-item.active { color: var(--accent); }
 
 /* Floating Add Resume Button */
 @keyframes bob {

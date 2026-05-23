@@ -51,12 +51,12 @@ function QRModal({ onClose, url }: { onClose: () => void; url: string }) {
 }
 
 const TABS = [
-  { key: 'jobs', label: 'Jobs' },
-  { key: 'resume', label: 'Resume Match' },
-  { key: 'improve', label: 'Improve' },
-  { key: 'pipeline', label: 'Pipeline' },
-  { key: 'network', label: 'Network' },
-  { key: 'growth', label: 'Growth' },
+  { key: 'jobs', label: 'Jobs', icon: '&#128269;' },
+  { key: 'resume', label: 'Resume', icon: '&#128196;' },
+  { key: 'improve', label: 'Improve', icon: '&#128200;' },
+  { key: 'pipeline', label: 'Pipeline', icon: '&#128203;' },
+  { key: 'network', label: 'Network', icon: '&#128101;' },
+  { key: 'growth', label: 'Growth', icon: '&#128200;' },
 ]
 
 export default function Dashboard() {
@@ -183,6 +183,17 @@ export default function Dashboard() {
       <button className="floating-add-btn" onClick={() => setActiveTab('resume')} title="Add Resume">
           +
         </button>
+
+        <nav className="bottom-nav">
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              className={`bottom-nav-item ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.key)}
+              dangerouslySetInnerHTML={{ __html: `${tab.icon}<span>${tab.label}</span>` }}
+            />
+          ))}
+        </nav>
 
         {showQRModal && <QRModal onClose={() => setShowQRModal(false)} url={window.location.origin} />}
         {showSettings && <Settings onClose={() => setShowSettings(false)} onNotionSync={handleNotionSync} />}
