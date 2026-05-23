@@ -107,12 +107,13 @@ export default function Dashboard() {
         <div className="logo">
           <Logo size={34} />
           <span>Meeseeker</span>
+          <span className="mobile-tab-label">/ {TABS.find(t => t.key === activeTab)?.label || ''}</span>
           <small>Job Tracker</small>
         </div>
         <div className="header-actions">
-          <span className="badge"><strong>{jobs.length}</strong> tracked</span>
-          <span className="badge"><strong>{applications.length}</strong> applied</span>
-          <span className="badge">{activeApis}/{totalApis} APIs</span>
+          <span className="badge desktop-only"><strong>{jobs.length}</strong> tracked</span>
+          <span className="badge desktop-only"><strong>{applications.length}</strong> applied</span>
+          <span className="badge desktop-only">{activeApis}/{totalApis} APIs</span>
           {notionConfig.enabled && (
             <button
               className="btn btn-outline btn-sm"
@@ -151,7 +152,7 @@ export default function Dashboard() {
         ))}
       </nav>
 
-      <div className="container">
+      <div className="container tab-content">
         {activeTab === 'jobs' && (
           <JobsView
             jobs={jobs}
