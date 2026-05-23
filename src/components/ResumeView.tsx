@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, FormEvent, useRef } from 'react'
 import { analyseResume, findJobsFromResume, type AutoSearchResult } from '../lib/api'
 import { useResumes } from '../hooks/useData'
 
@@ -173,6 +173,33 @@ export default function ResumeView({ onAutoSearch }: ResumeViewProps = {}) {
       setDetectedIndustry(inferIndustry(text))
     }
   }, [text, latestResume])
+
+  const autoSearchRef = useRef('')
+
+  useEffect(() => {
+    if (text.length > 100 && detectedIndustry && !latestResume && autoSearchRef.current !== text) {
+      autoSearchRef.current = text
+      const timer = setTimeout(() => {
+        const saved = saveResume({
+          text_content: text,
+          file_name: 'Pasted resume',
+          ats_score: portfolioScore?.overall || 50,
+          best_fit: detectedIndustry,
+          found_keywords: [],
+          missing_keywords: [],
+          skills: [],
+          ats_breakdown: [],
+          analysed_at: new Date().toISOString(),
+          version: 1,
+          is_active: true,
+          parent_id: null,
+          tags: [],
+        })
+        if (saved) handleFindJobs()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [text, detectedIndustry])
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
