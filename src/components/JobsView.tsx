@@ -47,6 +47,7 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
   const [searchLocation, setSearchLocation] = useState('')
   const [searchRemote, setSearchRemote] = useState(true)
   const [searchSource, setSearchSource] = useState('jsearch')
+  const [datePosted, setDatePosted] = useState('all')
   const [workArrangement, setWorkArrangement] = useState<'any' | 'remote' | 'hybrid' | 'office'>('any')
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -116,6 +117,7 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
         query: searchQuery,
         location: searchLocation || undefined,
         remote_only: searchRemote || undefined,
+        date_posted: datePosted !== 'all' ? datePosted : undefined,
       })
       setSearchResults(data.jobs || [])
       setCurrentPage(1)
@@ -294,6 +296,17 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
             </button>
           ))}
         </div>
+        <select
+          value={datePosted}
+          onChange={e => setDatePosted(e.target.value)}
+          style={{ padding: '6px 8px', borderRadius: 0, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 10, outline: 'none', cursor: 'pointer', fontWeight: 500 }}
+        >
+          <option value="all">Any time</option>
+          <option value="today">24h</option>
+          <option value="3days">3 days</option>
+          <option value="week">7 days</option>
+          <option value="month">30 days</option>
+        </select>
         <button type="submit" className="btn btn-primary btn-sm" disabled={searching}>
           {searching ? <><span className="spinner"></span> Searching...</> : 'Search'}
         </button>

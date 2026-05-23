@@ -280,7 +280,7 @@ async function searchWithAdzuna(req, res, keys) {
     return res.status(500).json({ error: 'Adzuna API key not configured. Use format app_id:app_key.' })
   }
 
-  const { query, location } = req.body
+  const { query, location, date_posted } = req.body
   const parts = keys.adzuna.split(':')
   const appId = parts[0] || ''
   const appKey = parts[1] || ''
@@ -288,6 +288,11 @@ async function searchWithAdzuna(req, res, keys) {
   try {
     const params = new URLSearchParams({ app_id: appId, app_key: appKey, results_per_page: '20', what: query || '' })
     if (location) params.set('where', location)
+    if (date_posted) {
+      const daysMap = { today: '1', '3days': '3', week: '7', month: '30' }
+      const maxDays = daysMap[date_posted]
+      if (maxDays) params.set('max_days_old', maxDays)
+    }
 
     const response = await fetch(`https://api.adzuna.com/v1/api/jobs/us/search/1?${params}`)
 
