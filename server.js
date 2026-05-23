@@ -10,7 +10,7 @@ app.use(express.json({ limit: '10mb' }))
 
 const isProd = process.env.NODE_ENV === 'production'
 
-if (isProd) {
+if (isProd && process.env.VERCEL !== '1') {
   app.use(express.static('dist'))
   app.get('*', (_req, res) => res.sendFile('dist/index.html'))
 }
@@ -611,6 +611,10 @@ app.get('/api/network-ip', (req, res) => {
 
 const PORT = process.env.PORT || 3001
 
-app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`)
-})
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`API server running on http://localhost:${PORT}`)
+  })
+}
+
+export default app

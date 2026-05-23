@@ -10,7 +10,7 @@
 2. **Fix YC search** — slow/timing out (~20min)
 3. **Fix "Find Jobs" from resume** — paste doesn't trigger search (~30min)
 4. **Add date filters to job search** — posted within (24h, 3d, 7d, 30d) (~30min)
-5. **Improve API provider integration** — better error handling, fallbacks, retry logic (~1h)
+5. **Improve API provider integration** — per-source timeouts (cut slow sources at 5-8s), retry with fallback if one fails, cache recent search results in localStorage, consider Vercel serverless functions for edge network speed (~1h)
 6. **Notion integration guide** — add tips/docs in-app on using Notion DB with job hunting (~30min)
 7. **Bug sweep** — test all features, fix edge cases (~1h)
 
