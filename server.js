@@ -150,61 +150,81 @@ async function searchWithApify(req, res, keys) {
 
   const { query, location, remote_only } = req.body
 
-  try {
-    const actorId = 'santamaria-automations~indeed-scraper'
-    const input = {
-      search: query,
-      maxResults: 20,
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 12000)
+
+  const actorIds = [
+    'santamaria-automations~indeed-scraper',
+    'curiouser~indeed-scraper',
+    'misceres~indeed-scraper',
+  ]
+
+  for (const actorId of actorIds) {
+    try {
+      const input = { search: query, maxResults: 20 }
+      if (location) input.location = location
+
+      const response = await fetch(`https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${keys.apify}&timeoutSecs=20`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        if (response.status === 404) continue
+        const errBody = await response.text().catch(() => '')
+        throw new Error(`Apify run failed: ${response.status} ${errBody.slice(0, 200)}`)
+      }
+
+      let items
+      try { items = await response.json() }
+      catch { throw new Error('Invalid JSON from Apify') }
+
+      const jobs = (Array.isArray(items) ? items : []).map((item) => ({
+        job_title: item.jobTitle || item.title || item.job_title || '',
+        employer_name: item.company || item.employerName || item.company_name || item.employer_name || '',
+        employer_logo: item.companyLogo || item.employerLogo || item.company_logo || null,
+        employer_website: item.companyUrl || item.employerWebsite || '',
+        job_employment_type: item.jobType || item.job_type || item.employmentType || item.job_employment_type || '',
+        job_apply_link: item.url || item.applyLink || item.apply_url || item.job_apply_link || '',
+        job_description: item.description || item.jobDescription || item.job_description || '',
+        job_is_remote: remote_only || /remote/i.test(item.title || '') || /remote/i.test(item.description || '') || item.isRemote === true,
+        job_posted_at_timestamp: item.datePosted || item.postedDate || item.date_posted ? new Date(item.datePosted || item.postedDate || item.date_posted).getTime() / 1000 : Date.now() / 1000,
+        job_city: item.location ? item.location.split(',')[0]?.trim() : null,
+        job_state: null,
+        job_country: '',
+        job_required_skills: item.skills || item.requiredSkills || item.required_skills || [],
+        job_salary_currency: item.salaryCurrency || item.salary_currency || null,
+        job_salary_period: item.salaryPeriod || item.salary_period || null,
+        job_min_salary: item.salaryMin || item.salary_min || item.minSalary || null,
+        job_max_salary: item.salaryMax || item.salary_max || item.maxSalary || null,
+        source: 'Apify',
+      }))
+
+      clearTimeout(timeoutId)
+      return res.json({ jobs })
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        clearTimeout(timeoutId)
+        return res.status(500).json({ error: 'Apify search timed out after 12s. Try a more specific query or check your API key.' })
+      }
+      if (actorId === actorIds[actorIds.length - 1]) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return res.status(500).json({ error: `Apify search failed: ${message}` })
+      }
     }
-    if (location) input.location = location
-
-    const response = await fetch(`https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${keys.apify}&timeoutSecs=60`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    })
-
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => '')
-      throw new Error(`Apify run failed: ${response.status} ${errBody.slice(0, 200)}`)
-    }
-
-    let items
-    try { items = await response.json() }
-    catch { throw new Error('Invalid JSON from Apify') }
-    const jobs = (Array.isArray(items) ? items : []).map((item) => ({
-      job_title: item.jobTitle || item.title || item.job_title || '',
-      employer_name: item.company || item.employerName || item.company_name || item.employer_name || '',
-      employer_logo: item.companyLogo || item.employerLogo || item.company_logo || null,
-      employer_website: item.companyUrl || item.employerWebsite || '',
-      job_employment_type: item.jobType || item.job_type || item.employmentType || item.job_employment_type || '',
-      job_apply_link: item.url || item.applyLink || item.apply_url || item.job_apply_link || '',
-      job_description: item.description || item.jobDescription || item.job_description || '',
-      job_is_remote: remote_only || /remote/i.test(item.title || '') || /remote/i.test(item.description || '') || item.isRemote === true,
-      job_posted_at_timestamp: item.datePosted || item.postedDate || item.date_posted ? new Date(item.datePosted || item.postedDate || item.date_posted).getTime() / 1000 : Date.now() / 1000,
-      job_city: item.location ? item.location.split(',')[0]?.trim() : null,
-      job_state: null,
-      job_country: '',
-      job_required_skills: item.skills || item.requiredSkills || item.required_skills || [],
-      job_salary_currency: item.salaryCurrency || item.salary_currency || null,
-      job_salary_period: item.salaryPeriod || item.salary_period || null,
-      job_min_salary: item.salaryMin || item.salary_min || item.minSalary || null,
-      job_max_salary: item.salaryMax || item.salary_max || item.maxSalary || null,
-      source: 'Apify',
-    }))
-
-    res.json({ jobs })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    res.status(500).json({ error: message })
   }
 }
 
 async function searchWithYC(req, res) {
   const { query } = req.body
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 8000)
+
   try {
-    const response = await fetch('https://api.ycombinator.com/v0.1/companies?limit=50&hiring=true')
+    const response = await fetch('https://api.ycombinator.com/v0.1/companies?limit=50&hiring=true', { signal: controller.signal })
 
     if (!response.ok) {
       throw new Error(`YC API error: ${response.status}`)
@@ -243,8 +263,13 @@ async function searchWithYC(req, res) {
       source: 'YC',
     }))
 
+    clearTimeout(timeoutId)
     res.json({ jobs })
   } catch (error) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      return res.status(500).json({ error: 'YC search timed out after 8s. Try again later.' })
+    }
     const message = error instanceof Error ? error.message : 'Unknown error'
     res.status(500).json({ error: message })
   }
