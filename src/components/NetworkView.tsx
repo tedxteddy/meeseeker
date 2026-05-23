@@ -44,9 +44,13 @@ export default function NetworkView({ targets, onLogSent, onLogReply }: NetworkV
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(TEMPLATES[activeTab])
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1200)
+    try {
+      await navigator.clipboard.writeText(TEMPLATES[activeTab])
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
   }
 
   const sent = targets.reduce((sum, t) => sum + t.sent_count, 0)
@@ -55,7 +59,7 @@ export default function NetworkView({ targets, onLogSent, onLogReply }: NetworkV
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 16 }}>
           <h3 style={{ fontSize: 13, marginBottom: 12 }}>Outreach Templates</h3>
           <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
             {Object.keys(TEMPLATES).map(key => (
@@ -76,7 +80,7 @@ export default function NetworkView({ targets, onLogSent, onLogReply }: NetworkV
               minHeight: 180,
               background: 'var(--bg)',
               border: '1px solid var(--border)',
-              borderRadius: 8,
+              borderRadius: 0,
               padding: 12,
               color: 'var(--text)',
               fontFamily: 'inherit',
@@ -91,9 +95,9 @@ export default function NetworkView({ targets, onLogSent, onLogReply }: NetworkV
           </button>
         </div>
 
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 16 }}>
           <h3 style={{ fontSize: 13, marginBottom: 12 }}>Response Analytics</h3>
-          <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: 12, marginBottom: 12, textAlign: 'center' }}>
+          <div style={{ background: 'var(--surface-2)', borderRadius: 0, padding: 12, marginBottom: 12, textAlign: 'center' }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>{sent} sent</div>
             <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{replies} replies — {sent ? Math.round((replies / sent) * 100) : 0}% response rate</div>
           </div>

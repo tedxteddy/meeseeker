@@ -201,7 +201,7 @@ ${buzzwordMatch.filter(b => !b.found).map(b => `- ${b.word}`).join('\n')}
     a.href = url
     a.download = exportTemplate === 'ats' ? 'ats-optimized-resume.txt' : 'resume.txt'
     a.click()
-    URL.revokeObjectURL(url)
+    requestAnimationFrame(() => URL.revokeObjectURL(url))
     setShowExportModal(false)
   }
 
@@ -220,7 +220,7 @@ ${buzzwordMatch.filter(b => !b.found).map(b => `- ${b.word}`).join('\n')}
             onChange={e => setSelectedRole(e.target.value)}
             style={{
               padding: '6px 10px',
-              borderRadius: 6,
+              borderRadius: 0,
               border: '1px solid var(--border)',
               background: 'var(--surface)',
               color: 'var(--text)',
@@ -263,7 +263,7 @@ ${buzzwordMatch.filter(b => !b.found).map(b => `- ${b.word}`).join('\n')}
           </div>
 
           {/* Skill Gap Analysis */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 16, marginBottom: 16 }}>
             <h3 style={{ fontSize: 14, marginBottom: 12 }}>
               Skill Gap Analysis for {selectedRole}
             </h3>
@@ -282,7 +282,7 @@ ${buzzwordMatch.filter(b => !b.found).map(b => `- ${b.word}`).join('\n')}
                     </span>
                   </div>
                   <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden', marginBottom: 4 }}>
-                    <div style={{ height: '100%', width: `${(gap.currentLevel / gap.targetLevel) * 100}%`, background: gapSize > 30 ? 'var(--red)' : gapSize > 10 ? 'var(--orange)' : 'var(--green)', borderRadius: 3, transition: 'width 0.4s' }} />
+                    <div style={{ height: '100%', width: `${gap.targetLevel > 0 ? (gap.currentLevel / gap.targetLevel) * 100 : gap.currentLevel > 0 ? 100 : 0}%`, background: gapSize > 30 ? 'var(--red)' : gapSize > 10 ? 'var(--orange)' : 'var(--green)', borderRadius: 3, transition: 'width 0.4s' }} />
                   </div>
                   {isSignificant && (
                     <button className="btn btn-link btn-xs" onClick={() => toggleResources(gap.skill)} style={{ fontSize: 11, color: 'var(--blue)', padding: 0 }}>
@@ -305,7 +305,7 @@ ${buzzwordMatch.filter(b => !b.found).map(b => `- ${b.word}`).join('\n')}
           </div>
 
           {/* Portfolio & LinkedIn Detection */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 16, marginBottom: 16 }}>
             <h3 style={{ fontSize: 14, marginBottom: 12 }}>Portfolio & Profiles</h3>
             {(() => {
               const text = latestResume.text_content || ''
@@ -384,7 +384,7 @@ ${buzzwordMatch.filter(b => !b.found).map(b => `- ${b.word}`).join('\n')}
           </div>
 
           {/* Keyword Optimization */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 16, marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h3 style={{ fontSize: 14, margin: 0 }}>
                 Keyword Optimization
@@ -415,7 +415,7 @@ ${buzzwordMatch.filter(b => !b.found).map(b => `- ${b.word}`).join('\n')}
 
           {/* Resume Versioning */}
           {allResumes.length > 1 && (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 16 }}>
               <h3 style={{ fontSize: 14, marginBottom: 12 }}>Resume Versions ({allResumes.length})</h3>
               {allResumes.map((resume, i) => (
                 <div key={resume.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < allResumes.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 13 }}>

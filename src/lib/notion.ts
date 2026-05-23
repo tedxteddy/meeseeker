@@ -67,10 +67,11 @@ export async function verifyNotionConnection(apiKey: string, databaseId: string)
     })
 
     if (!response.ok) {
-      const error = await response.json()
+      let msg = 'Failed to connect to Notion'
+      try { msg = (await response.json()).message || msg } catch { /* ignore */ }
       if (response.status === 401) return { success: false, error: 'Invalid API key' }
       if (response.status === 404) return { success: false, error: 'Database not found. Make sure the database exists and is shared with your integration.' }
-      return { success: false, error: error.message || 'Failed to connect to Notion' }
+      return { success: false, error: msg }
     }
 
     return { success: true }
@@ -111,11 +112,15 @@ export async function createNotionJobPage(apiKey: string, databaseId: string, jo
     })
 
     if (!response.ok) {
-      console.error('Failed to create Notion page:', await response.json())
+      let errMsg = 'Failed to create Notion page'
+      try { errMsg = (await response.json()).message || errMsg } catch { /* ignore */ }
+      console.error('Failed to create Notion page:', errMsg)
       return null
     }
 
-    const data = await response.json()
+    let data
+    try { data = await response.json() }
+    catch { return null }
     return { pageId: data.id }
   } catch (err) {
     console.error('Error creating Notion page:', err)
@@ -159,11 +164,15 @@ export async function searchNotionJobs(apiKey: string, databaseId: string): Prom
     })
 
     if (!response.ok) {
-      console.error('Failed to query Notion database:', await response.json())
+      let errMsg = 'Failed to query Notion database'
+      try { errMsg = (await response.json()).message || errMsg } catch { /* ignore */ }
+      console.error('Failed to query Notion database:', errMsg)
       return []
     }
 
-    const data = await response.json()
+    let data
+    try { data = await response.json() }
+    catch { return [] }
     const jobs: Array<{ notionPageId: string; job: NotionJob }> = []
 
     for (const page of data.results) {

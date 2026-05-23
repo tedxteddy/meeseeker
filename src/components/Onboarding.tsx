@@ -91,7 +91,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }}>
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 20, maxWidth: 520, width: '100%', overflow: 'hidden',
+        borderRadius: 0, maxWidth: 520, width: '100%', overflow: 'hidden',
         boxShadow: '0 25px 80px rgba(0,0,0,0.5)'
       }}>
         <div style={{
@@ -130,7 +130,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               {step.bullets.map((bullet, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 12,
-                  padding: '12px 14px', background: 'var(--surface-2)', borderRadius: 10
+                  padding: '12px 14px', background: 'var(--surface-2)', borderRadius: 0
                 }}>
                   <span style={{ fontSize: 20 }} dangerouslySetInnerHTML={{ __html: bullet.icon }} />
                   <span style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>{bullet.text}</span>
@@ -144,7 +144,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               {step.keys.map((key, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 14px', background: 'var(--surface-2)', borderRadius: 10
+                  padding: '12px 14px', background: 'var(--surface-2)', borderRadius: 0
                 }}>
                   <div style={{
                     width: 8, height: 8, borderRadius: '50%', background: key.color
@@ -165,7 +165,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             <div style={{ textAlign: 'center' }}>
               {latest && latest.ats_score > 0 ? (
                 <div style={{
-                  padding: '16px', background: 'rgba(0,214,143,0.1)', borderRadius: 10,
+                  padding: '16px', background: 'rgba(0,214,143,0.1)', borderRadius: 0,
                   border: '1px solid rgba(0,214,143,0.3)', marginBottom: 16
                 }}>
                   <span style={{ fontSize: 24 }}>&#9989;</span>
@@ -175,7 +175,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 </div>
               ) : (
                 <div style={{
-                  padding: '16px', background: 'var(--surface-2)', borderRadius: 10,
+                  padding: '16px', background: 'var(--surface-2)', borderRadius: 0,
                   border: '1px solid var(--border)', marginBottom: 16
                 }}>
                   <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>
