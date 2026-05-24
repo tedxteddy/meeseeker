@@ -1,5 +1,7 @@
 # Meeseeker — Career Intelligence Dashboard
 
+**Live:** [https://meeseeker.vercel.app](https://meeseeker.vercel.app)
+
 A local-first job search dashboard with real-time job scraping, AI resume parsing, Notion sync, and application tracking. Deploy once, share with everyone — each user brings their own API keys.
 
 ## Quick Start
@@ -47,7 +49,7 @@ Opens at `http://localhost:3000` with API server on `http://localhost:3001`.
 
 ## Features
 
-- **3 job sources**: JSearch (100+ boards), Apify (Indeed), YC Jobs (startups)
+- **7 job sources**: JSearch, Apify (Indeed + LinkedIn), YC Jobs, Adzuna, Jooble, Jobicy
 - **Work arrangement filter**: Remote / Hybrid / Office toggle
 - **PDF/TXT resume upload** with ATS scoring and skill extraction
 - **AI resume parsing** via OpenAI (or local fallback)
