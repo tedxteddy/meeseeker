@@ -46,7 +46,9 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
   const [searchQuery, setSearchQuery] = useState('')
   const [searchLocation, setSearchLocation] = useState('')
   const [searchRemote, setSearchRemote] = useState(true)
-  const [searchSource, setSearchSource] = useState('jsearch')
+  const [internationalRemote, setInternationalRemote] = useState(true)
+  const [globalRegion, setGlobalRegion] = useState('worldwide')
+  const [searchSource, setSearchSource] = useState('auto')
   const [designFocus, setDesignFocus] = useState(true)
   const [jobType, setJobType] = useState('all')
   const [datePosted, setDatePosted] = useState('all')
@@ -82,13 +84,25 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
     'figma',
   ]
 
+  const INTERNATIONAL_TERMS_BY_REGION: Record<string, string[]> = {
+    worldwide: ['remote', 'worldwide', 'global', 'distributed'],
+    europe: ['remote', 'europe', 'eu timezone', 'emea'],
+    asia: ['remote', 'asia', 'apac'],
+    americas: ['remote', 'americas', 'north america', 'latin america'],
+  }
+
   function buildDesignQuery(base: string) {
     const q = (base || '').trim()
     if (!q) return q
     if (!designFocus) return q
     const lower = q.toLowerCase()
     const hasDesignSignal = DESIGN_TERMS.some(term => lower.includes(term))
-    return hasDesignSignal ? q : `${q} designer`
+    const core = hasDesignSignal ? q : `${q} designer`
+    if (!internationalRemote) return core
+
+    const regionTerms = INTERNATIONAL_TERMS_BY_REGION[globalRegion] || INTERNATIONAL_TERMS_BY_REGION.worldwide
+    const hasRegionSignal = regionTerms.some(term => lower.includes(term))
+    return hasRegionSignal ? core : `${core} ${regionTerms.join(' ')}`
   }
 
   function handleSaveResult(result: SearchResult) {
@@ -128,6 +142,31 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
     setSearchResults([])
 
     const sourceFnMap: Record<string, (params: Record<string, unknown>) => Promise<{ jobs: SearchResult[] }>> = {
+      auto: async (params: Record<string, unknown>) => {
+        const attempts = await Promise.allSettled([
+          searchJobs(params),
+          searchJobsLinkedIn(params),
+          searchJobsApify(params),
+          searchJobsAdzuna(params),
+          searchJobsJobicy(params),
+          searchJobsYC(params),
+        ])
+
+        const merged: SearchResult[] = []
+        const seen = new Set<string>()
+
+        for (const r of attempts) {
+          if (r.status !== 'fulfilled') continue
+          for (const job of r.value.jobs || []) {
+            const k = `${job.job_title || ''}|${job.employer_name || ''}`.toLowerCase()
+            if (seen.has(k)) continue
+            seen.add(k)
+            merged.push(job)
+          }
+        }
+
+        return { jobs: merged }
+      },
       jsearch: searchJobs,
       apify: searchJobsApify,
       linkedin: searchJobsLinkedIn,
@@ -137,22 +176,23 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
     }
 
     const fallbackOrderMap: Record<string, string[]> = {
+      auto: ['jsearch', 'jobicy', 'yc'],
       linkedin: ['jsearch', 'jobicy', 'yc'],
       apify: ['jsearch', 'jobicy', 'yc'],
       adzuna: ['jsearch', 'jobicy'],
       yc: ['jsearch', 'jobicy'],
-      jsearch: ['jobicy', 'yc'],
+      jsearch: ['yc', 'jobicy'],
       jobicy: ['jsearch', 'yc'],
     }
 
     const query = buildDesignQuery(searchQuery)
-    const payload = {
-      query,
-      location: searchLocation || undefined,
-      remote_only: searchRemote || undefined,
-      date_posted: datePosted !== 'all' ? datePosted : undefined,
-      job_type: jobType !== 'all' ? jobType : undefined,
-    }
+      const payload = {
+        query,
+        location: internationalRemote ? undefined : (searchLocation || undefined),
+        remote_only: (internationalRemote || searchRemote) ? true : undefined,
+        date_posted: datePosted !== 'all' ? datePosted : undefined,
+        job_type: jobType !== 'all' ? jobType : undefined,
+      }
 
     try {
       const primaryFn = sourceFnMap[searchSource] || searchJobs
@@ -314,6 +354,7 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
     <>
       <form onSubmit={handleSearch} className="controls">
         <select className="filter-select" value={searchSource} onChange={e => setSearchSource(e.target.value)}>
+          <option value="auto">Auto (All Sources)</option>
           <option value="jsearch">JSearch {apiStatus.jsearch ? '' : '(key required)'}</option>
           <option value="linkedin">LinkedIn {apiStatus.linkedin ? '' : '(uses Apify key)'}</option>
           <option value="apify">Indeed (Apify) {apiStatus.apify ? '' : '(key required)'}</option>
@@ -335,9 +376,34 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
           type="text"
           value={searchLocation}
           onChange={e => setSearchLocation(e.target.value)}
-          placeholder="Location (optional)"
+          placeholder={internationalRemote ? 'Location disabled in International mode' : 'Location (optional)'}
+          disabled={internationalRemote}
           style={{ padding: '8px 10px', borderRadius: 0, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 11, outline: 'none', minWidth: 120 }}
         />
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          onClick={() => setInternationalRemote(prev => !prev)}
+          title="Search global remote jobs across regions"
+          style={{
+            borderColor: internationalRemote ? 'var(--accent)' : 'var(--border)',
+            color: internationalRemote ? 'var(--accent)' : 'var(--text-2)',
+          }}
+        >
+          {internationalRemote ? 'International: On' : 'International: Off'}
+        </button>
+        <select
+          value={globalRegion}
+          onChange={e => setGlobalRegion(e.target.value)}
+          disabled={!internationalRemote}
+          style={{ padding: '6px 8px', borderRadius: 0, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 10, outline: 'none', cursor: 'pointer', fontWeight: 500 }}
+          title="Preferred remote region"
+        >
+          <option value="worldwide">Worldwide</option>
+          <option value="europe">Europe</option>
+          <option value="asia">Asia-Pacific</option>
+          <option value="americas">Americas</option>
+        </select>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ fontSize: 10, color: 'var(--text-2)', marginRight: 4 }}>Work:</span>
           {WORK_ARRANGEMENTS.map(arr => (
@@ -463,10 +529,37 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
         </div>
       )}
 
+      <div style={{ marginBottom: 20, border: '1px solid var(--border)', background: 'var(--surface)', padding: 12 }}>
+        <div className="stats-bar" style={{ marginBottom: 8 }}>
+          <span><strong>Global Remote Platforms</strong></span>
+          <span className="source-indicator" style={{ fontSize: 10 }}>Use these alongside Meeseeker search</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {[
+            { label: 'We Work Remotely', url: 'https://weworkremotely.com/' },
+            { label: 'Remote.co', url: 'https://remote.co/remote-jobs/' },
+            { label: 'Himalayas', url: 'https://himalayas.app/jobs' },
+            { label: 'OverseasJobs', url: 'https://overseasjobs.com/' },
+          ].map(site => (
+            <a
+              key={site.label}
+              href={site.url}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-outline btn-sm"
+              style={{ textDecoration: 'none' }}
+            >
+              {site.label} &#8599;
+            </a>
+          ))}
+        </div>
+      </div>
+
       {searchResults.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <div className="stats-bar">
             <span>{searchResults.length} results from <strong>{{
+              auto: 'Auto (All Sources)',
               jsearch: 'JSearch', linkedin: 'LinkedIn', apify: 'Indeed (Apify)', yc: 'YC Jobs',
               adzuna: 'Adzuna', jobicy: 'Jobicy',
             }[searchSource] || searchSource}</strong></span>
