@@ -12,8 +12,7 @@ const API_PROVIDERS = [
   { key: 'apify', label: 'Apify (Indeed Scraper)', placeholder: 'apify_api_...', help: 'Scrapes Indeed listings. Get from console.apify.com', link: 'https://console.apify.com/account#/integrations', badge: '(needs key)', free: false },
   { key: 'linkedin', label: 'LinkedIn Jobs (via Apify)', placeholder: '', help: 'Scrapes LinkedIn listings using your Apify API key.', link: 'https://console.apify.com/account#/integrations', badge: '(uses Apify key)', free: true },
   { key: 'openai', label: 'OpenAI (Resume AI)', placeholder: 'sk-proj-...', help: 'AI-powered resume parsing.', link: 'https://platform.openai.com/api-keys', badge: '(needs key)', free: false },
-  { key: 'adzuna', label: 'Adzuna', placeholder: 'app_id:app_key', help: 'Free tier available (50 calls/day). Get from developer.adzuna.com', link: 'https://developer.adzuna.com/account', badge: '(needs key)', free: false },
-  { key: 'jooble', label: 'Jooble', placeholder: 'Your Jooble API key', help: 'Free 100 searches/day. Get from jooble.org/api', link: 'https://jooble.org/api', badge: '(needs key)', free: false },
+  { key: 'adzuna', label: 'Adzuna', placeholder: 'app_id:app_key', help: 'Use App ID and App Key joined with ":" (example: abc123:def456).', link: 'https://developer.adzuna.com/account', badge: '(needs key)', free: false },
   { key: 'jobicy', label: 'Jobicy (Remote Jobs)', placeholder: '', help: 'Free remote job listings, no API key required.', link: 'https://jobicy.com/api/v2/remote-jobs', badge: '(free)', free: true },
   { key: 'claude', label: 'Claude (Anthropic)', placeholder: 'sk-ant-...', help: 'AI resume analysis. Get from console.anthropic.com', link: 'https://console.anthropic.com/', badge: '(needs key)', free: false },
   { key: 'gemini', label: 'Gemini (Google AI)', placeholder: 'AIza...', help: 'AI resume analysis. Get from aistudio.google.com', link: 'https://aistudio.google.com/apikey', badge: '(needs key)', free: false },
@@ -31,7 +30,6 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
     apify: getStored('api_apify'),
     openai: getStored('api_openai'),
     adzuna: getStored('api_adzuna'),
-    jooble: getStored('api_jooble'),
     claude: getStored('api_claude'),
     gemini: getStored('api_gemini'),
   })

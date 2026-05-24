@@ -1,13 +1,47 @@
 const API_BASE = '/api'
 const CACHE_TTL = 5 * 60 * 1000
 
+const DESIGN_HIGH_INTENT_TOKENS = [
+  'product designer',
+  'ui designer',
+  'ux designer',
+  'ui/ux',
+  'graphic designer',
+  'visual designer',
+  'brand designer',
+]
+
+const DESIGN_SUPPORT_TOKENS = [
+  'design',
+  'designer',
+  'figma',
+  'wireframe',
+  'prototype',
+  'typography',
+  'branding',
+  'visual',
+  'creative',
+]
+
+const NON_DESIGN_NOISE_TOKENS = [
+  'sales',
+  'account executive',
+  'business development',
+  'customer support',
+  'call center',
+  'data entry',
+  'bookkeeper',
+  'nurse',
+  'driver',
+  'warehouse',
+]
+
 function getApiKeys() {
   return {
     jsearch: localStorage.getItem('api_jsearch') || '',
     apify: localStorage.getItem('api_apify') || '',
     openai: localStorage.getItem('api_openai') || '',
     adzuna: localStorage.getItem('api_adzuna') || '',
-    jooble: localStorage.getItem('api_jooble') || '',
     claude: localStorage.getItem('api_claude') || '',
     gemini: localStorage.getItem('api_gemini') || '',
   }
@@ -42,6 +76,61 @@ function cacheSet<T>(key: string, data: T) {
   }
 }
 
+function scoreDesignRelevance(job: {
+  job_title?: string
+  job_description?: string
+  source?: string
+  job_is_remote?: boolean
+}): number {
+  const title = (job.job_title || '').toLowerCase()
+  const desc = (job.job_description || '').toLowerCase()
+  const text = `${title} ${desc}`
+
+  let score = 0
+
+  for (const token of DESIGN_HIGH_INTENT_TOKENS) {
+    if (title.includes(token)) score += 35
+    else if (text.includes(token)) score += 20
+  }
+
+  for (const token of DESIGN_SUPPORT_TOKENS) {
+    if (title.includes(token)) score += 8
+    else if (text.includes(token)) score += 3
+  }
+
+  for (const token of NON_DESIGN_NOISE_TOKENS) {
+    if (title.includes(token)) score -= 20
+    else if (text.includes(token)) score -= 8
+  }
+
+  if (job.job_is_remote) score += 4
+
+  if ((job.source || '').toLowerCase() === 'linkedin') score += 2
+  if ((job.source || '').toLowerCase() === 'apify') score += 1
+
+  return score
+}
+
+function rankDesignJobs<T extends {
+  job_title?: string
+  employer_name?: string
+  job_description?: string
+  source?: string
+  job_is_remote?: boolean
+  job_posted_at_timestamp?: number
+}>(jobs: T[]): T[] {
+  return [...jobs].sort((a, b) => {
+    const scoreDiff = scoreDesignRelevance(b) - scoreDesignRelevance(a)
+    if (scoreDiff !== 0) return scoreDiff
+
+    const timeA = a.job_posted_at_timestamp || 0
+    const timeB = b.job_posted_at_timestamp || 0
+    if (timeB !== timeA) return timeB - timeA
+
+    return (a.job_title || '').localeCompare(b.job_title || '')
+  })
+}
+
 export async function searchJobs(params: Record<string, unknown>) {
   const key = cacheKey(params)
   const cached = cacheGet<{ jobs: unknown[] }>(key)
@@ -62,7 +151,10 @@ export async function searchJobs(params: Record<string, unknown>) {
 
   try {
     const data = await response.json()
-    if (data.jobs && data.jobs.length > 0) cacheSet(key, data)
+    if (Array.isArray(data.jobs)) {
+      data.jobs = rankDesignJobs(data.jobs)
+      if (data.jobs.length > 0) cacheSet(key, data)
+    }
     return data
   } catch {
     throw new Error('Invalid JSON response from server')
@@ -79,10 +171,6 @@ export async function searchJobsYC(params: Record<string, unknown>) {
 
 export async function searchJobsAdzuna(params: Record<string, unknown>) {
   return searchJobs({ ...params, source: 'adzuna' })
-}
-
-export async function searchJobsJooble(params: Record<string, unknown>) {
-  return searchJobs({ ...params, source: 'jooble' })
 }
 
 export async function searchJobsJobicy(params: Record<string, unknown>) {
@@ -126,7 +214,6 @@ export function getApiKeyStatus() {
     linkedin: !!keys.apify,
     openai: !!keys.openai,
     adzuna: !!keys.adzuna,
-    jooble: !!keys.jooble,
     jobicy: true,
     claude: !!keys.claude,
     gemini: !!keys.gemini,
@@ -135,7 +222,7 @@ export function getApiKeyStatus() {
 
 export function getJobApiCount() {
   const s = getApiKeyStatus()
-  return [s.jsearch, s.apify, s.linkedin, s.adzuna, s.jooble, s.jobicy].filter(Boolean).length
+  return [s.jsearch, s.apify, s.linkedin, s.adzuna, s.jobicy].filter(Boolean).length
 }
 
 export async function scrapeEmails(url: string): Promise<string[]> {
@@ -202,7 +289,6 @@ export async function findJobsFromResume(
     { key: 'yc', fn: (q: string, loc?: string) => searchJobsYC({ query: q, location: loc }), hasKey: true },
     { key: 'linkedin', fn: (q: string, loc?: string) => searchJobsLinkedIn({ query: q, location: loc }), hasKey: status.linkedin },
     { key: 'adzuna', fn: (q: string, loc?: string) => searchJobsAdzuna({ query: q, location: loc }), hasKey: status.adzuna },
-    { key: 'jooble', fn: (q: string, loc?: string) => searchJobsJooble({ query: q, location: loc }), hasKey: status.jooble },
     { key: 'jobicy', fn: (q: string) => searchJobsJobicy({ query: q }), hasKey: true },
     { key: 'apify', fn: (q: string, loc?: string) => searchJobsApify({ query: q, location: loc }), hasKey: status.apify },
   ]
@@ -252,10 +338,15 @@ export async function findJobsFromResume(
     return true
   })
 
-  const prioritized = deduped.sort((a, b) => {
-    const order = ['jsearch', 'adzuna', 'linkedin', 'jooble', 'apify', 'jobicy', 'YC']
-    return (order.indexOf(a.source) - order.indexOf(b.source))
+  const prioritizedBySource = deduped.sort((a, b) => {
+    const order = ['jsearch', 'adzuna', 'linkedin', 'apify', 'jobicy', 'yc']
+    const ai = order.indexOf((a.source || '').toLowerCase())
+    const bi = order.indexOf((b.source || '').toLowerCase())
+    const av = ai === -1 ? Number.MAX_SAFE_INTEGER : ai
+    const bv = bi === -1 ? Number.MAX_SAFE_INTEGER : bi
+    return av - bv
   })
+  const prioritized = rankDesignJobs(prioritizedBySource)
 
   const sourcesWithResults = [...new Set(prioritized.map(j => j.source))]
 

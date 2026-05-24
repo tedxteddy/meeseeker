@@ -148,6 +148,7 @@ export default function ResumeView({ onAutoSearch }: ResumeViewProps = {}) {
   const [searchingJobs, setSearchingJobs] = useState(false)
   const [searchJobsError, setSearchJobsError] = useState('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [showResumeText, setShowResumeText] = useState(false)
 
   const { latest: latestResume, saveResume, createResumeVersion, setActiveResume, deleteResume, allResumes } = useResumes()
 
@@ -617,7 +618,7 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
       {latestResume && (
         <>
           <div className="stats-bar" style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', flex: 1 }}>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', flex: 1 }}>
               <div style={{
                 background: latestResume.ats_score >= 60 ? 'rgba(0,214,143,0.12)' : latestResume.ats_score >= 40 ? 'rgba(255,159,67,0.12)' : 'rgba(238,90,111,0.12)',
                 padding: '12px 20px', borderRadius: 0, border: `1px solid ${latestResume.ats_score >= 60 ? 'rgba(0,214,143,0.3)' : latestResume.ats_score >= 40 ? 'rgba(255,159,67,0.3)' : 'rgba(238,90,111,0.3)'}`,
@@ -654,6 +655,14 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
               </button>
             )}
             <button
+              className="btn btn-sm"
+              onClick={() => setShowResumeText(prev => !prev)}
+              style={{ whiteSpace: 'nowrap', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+              title="Show extracted resume text"
+            >
+              {showResumeText ? 'Hide Resume Text' : 'View Resume Text'}
+            </button>
+            <button
               className="btn btn-primary btn-sm"
               onClick={handleFindJobs}
               disabled={searchingJobs}
@@ -666,6 +675,29 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
           {searchJobsError && (
             <div style={{ background: 'rgba(238,90,111,0.12)', border: '1px solid rgba(238,90,111,0.3)', borderRadius: 0, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--red)' }}>
               &#9888; {searchJobsError}
+            </div>
+          )}
+
+          {showResumeText && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 14, marginBottom: 16 }}>
+              <h3 style={{ fontSize: 13, marginBottom: 8 }}>&#128196; Resume Text</h3>
+              <textarea
+                value={latestResume.text_content || ''}
+                readOnly
+                style={{
+                  width: '100%',
+                  minHeight: 220,
+                  padding: 12,
+                  border: '1px solid var(--border)',
+                  borderRadius: 0,
+                  fontFamily: 'inherit',
+                  fontSize: 12,
+                  resize: 'vertical',
+                  background: 'var(--bg)',
+                  color: 'var(--text)',
+                  lineHeight: 1.6,
+                }}
+              />
             </div>
           )}
 

@@ -1,5 +1,5 @@
 import { useState, FormEvent, useMemo, useEffect } from 'react'
-import { searchJobs, searchJobsApify, searchJobsYC, searchJobsAdzuna, searchJobsJooble, searchJobsJobicy, getApiKeyStatus, scrapeEmails } from '../lib/api'
+import { searchJobs, searchJobsApify, searchJobsYC, searchJobsAdzuna, searchJobsJobicy, searchJobsLinkedIn, getApiKeyStatus, scrapeEmails } from '../lib/api'
 import { store } from '../lib/store'
 import { useResumes } from '../hooks/useData'
 
@@ -127,26 +127,65 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
     setError('')
     setSearchResults([])
 
+    const sourceFnMap: Record<string, (params: Record<string, unknown>) => Promise<{ jobs: SearchResult[] }>> = {
+      jsearch: searchJobs,
+      apify: searchJobsApify,
+      linkedin: searchJobsLinkedIn,
+      yc: searchJobsYC,
+      adzuna: searchJobsAdzuna,
+      jobicy: searchJobsJobicy,
+    }
+
+    const fallbackOrderMap: Record<string, string[]> = {
+      linkedin: ['jsearch', 'jobicy', 'yc'],
+      apify: ['jsearch', 'jobicy', 'yc'],
+      adzuna: ['jsearch', 'jobicy'],
+      yc: ['jsearch', 'jobicy'],
+      jsearch: ['jobicy', 'yc'],
+      jobicy: ['jsearch', 'yc'],
+    }
+
+    const query = buildDesignQuery(searchQuery)
+    const payload = {
+      query,
+      location: searchLocation || undefined,
+      remote_only: searchRemote || undefined,
+      date_posted: datePosted !== 'all' ? datePosted : undefined,
+      job_type: jobType !== 'all' ? jobType : undefined,
+    }
+
     try {
-      const searchFn =
-        searchSource === 'apify' ? searchJobsApify :
-        searchSource === 'yc' ? searchJobsYC :
-        searchSource === 'adzuna' ? searchJobsAdzuna :
-        searchSource === 'jooble' ? searchJobsJooble :
-        searchSource === 'jobicy' ? searchJobsJobicy :
-        searchJobs
-      const query = buildDesignQuery(searchQuery)
-      const data = await searchFn({
-        query,
-        location: searchLocation || undefined,
-        remote_only: searchRemote || undefined,
-        date_posted: datePosted !== 'all' ? datePosted : undefined,
-        job_type: jobType !== 'all' ? jobType : undefined,
-      })
+      const primaryFn = sourceFnMap[searchSource] || searchJobs
+      const data = await primaryFn(payload)
       setSearchResults(data.jobs || [])
       setCurrentPage(1)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Search failed')
+    } catch (primaryErr: unknown) {
+      const fallbacks = fallbackOrderMap[searchSource] || ['jobicy', 'yc']
+      let recovered = false
+      let lastErr: unknown = primaryErr
+
+      for (const fb of fallbacks) {
+        try {
+          const fbFn = sourceFnMap[fb]
+          if (!fbFn) continue
+          const fallbackData = await fbFn(payload)
+          const jobs = fallbackData.jobs || []
+          if (jobs.length > 0) {
+            setSearchResults(jobs)
+            setCurrentPage(1)
+            setError(`Primary source "${searchSource}" failed. Showing results from "${fb}" instead.`)
+            recovered = true
+            break
+          }
+        } catch (fbErr) {
+          lastErr = fbErr
+          continue
+        }
+      }
+
+      if (!recovered) {
+        setError(lastErr instanceof Error ? lastErr.message : 'Search failed')
+      }
     } finally {
       setSearching(false)
     }
@@ -279,7 +318,6 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
           <option value="linkedin">LinkedIn {apiStatus.linkedin ? '' : '(uses Apify key)'}</option>
           <option value="apify">Indeed (Apify) {apiStatus.apify ? '' : '(key required)'}</option>
           <option value="adzuna">Adzuna {apiStatus.adzuna ? '' : '(key required)'}</option>
-          <option value="jooble">Jooble {apiStatus.jooble ? '' : '(key required)'}</option>
           <option value="jobicy">Jobicy (free)</option>
           <option value="yc">YC Startups (free)</option>
         </select>
@@ -382,7 +420,7 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
             </div>
           </div>
           <div className="job-grid">
-            {autoResults.slice(0, 10).map((result, i) => {
+            {autoResults.map((result, i) => {
               const emails = extractEmails(result.job_description || '')
               return (
               <div key={i} className="job-card">
@@ -430,11 +468,11 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
           <div className="stats-bar">
             <span>{searchResults.length} results from <strong>{{
               jsearch: 'JSearch', linkedin: 'LinkedIn', apify: 'Indeed (Apify)', yc: 'YC Jobs',
-              adzuna: 'Adzuna', jooble: 'Jooble', jobicy: 'Jobicy',
+              adzuna: 'Adzuna', jobicy: 'Jobicy',
             }[searchSource] || searchSource}</strong></span>
           </div>
           <div className="job-grid">
-            {searchResults.slice(0, 10).map((result, i) => {
+            {searchResults.map((result, i) => {
               const emails = extractEmails(result.job_description || '')
               return (
               <div key={i} className="job-card">

@@ -46,7 +46,6 @@ function getKeys(req) {
     apify: req.body.apiKeys?.apify || process.env.APIFY_API_TOKEN || '',
     openai: req.body.apiKeys?.openai || process.env.OPENAI_API_KEY || '',
     adzuna: req.body.apiKeys?.adzuna || process.env.ADZUNA_API_KEY || '',
-    jooble: req.body.apiKeys?.jooble || process.env.JOOBLE_API_KEY || '',
     claude: req.body.apiKeys?.claude || process.env.CLAUDE_API_KEY || '',
     gemini: req.body.apiKeys?.gemini || process.env.GEMINI_API_KEY || '',
   }
@@ -81,10 +80,6 @@ app.post('/api/jobs/search', async (req, res) => {
     return searchWithAdzuna(req, res, keys)
   }
 
-  if (source === 'jooble') {
-    return searchWithJooble(req, res, keys)
-  }
-
   if (source === 'jobicy') {
     return searchWithJobicy(req, res)
   }
@@ -106,7 +101,7 @@ async function searchWithJSearch(req, res, keys) {
     const params = new URLSearchParams({
       query,
       page: '1',
-      num_pages: '1',
+      num_pages: '3',
     })
 
     if (location) params.set('location', location)
@@ -174,15 +169,17 @@ async function searchWithApify(req, res, keys) {
     'misceres~indeed-scraper',
   ]
 
+  let lastError = null
+
   for (const actorId of actorIds) {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 12000)
+    const timeoutId = setTimeout(() => controller.abort(), 16000)
 
     try {
       const input = { search: query, maxResults: 20 }
       if (location) input.location = location
 
-      const response = await fetch(`https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${keys.apify}&timeoutSecs=20`, {
+      const response = await fetch(`https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${keys.apify}&timeoutSecs=35`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -191,8 +188,21 @@ async function searchWithApify(req, res, keys) {
 
       if (!response.ok) {
         clearTimeout(timeoutId)
-        if (response.status === 404) continue
         const errBody = await response.text().catch(() => '')
+
+        // Actor not found -> try next fallback actor.
+        if (response.status === 404) continue
+
+        // Actor run started but failed (common with community actors and strict inputs).
+        // Treat as retryable and continue with the next actor.
+        if (
+          response.status === 400 &&
+          /run-failed|status:\s*FAILED|Actor run did not succeed/i.test(errBody)
+        ) {
+          lastError = new Error(`Actor failed: ${actorId}`)
+          continue
+        }
+
         throw new Error(`Apify run failed: ${response.status} ${errBody.slice(0, 200)}`)
       }
 
@@ -226,14 +236,23 @@ async function searchWithApify(req, res, keys) {
     } catch (error) {
       clearTimeout(timeoutId)
       if (error.name === 'AbortError') {
-        return res.status(500).json({ error: 'Apify search timed out after 12s. Try a more specific query or check your API key.' })
+        lastError = new Error(`Actor timeout: ${actorId}`)
+        continue
       }
+      lastError = error
       if (actorId === actorIds[actorIds.length - 1]) {
-        const message = error instanceof Error ? error.message : 'Unknown error'
+        const message = lastError instanceof Error ? lastError.message : 'Unknown error'
         return res.status(500).json({ error: `Apify search failed: ${message}` })
       }
     }
   }
+
+  // Final fallback: avoid hard failure when all Apify actors fail.
+  // Prefer JSearch (if key exists), otherwise use Jobicy free source.
+  if (keys.jsearch) {
+    return searchWithJSearch(req, res, keys)
+  }
+  return searchWithJobicy(req, res)
 }
 
 async function searchWithLinkedIn(req, res, keys) {
@@ -269,80 +288,108 @@ async function searchWithLinkedIn(req, res, keys) {
     'crawlworks~linkedin-jobs-scraper',
   ]
 
+  function getPayloadVariants(actorId, q, location) {
+    const base = { operationMode: 'searchJobs', searchJobsKeywords: q, maxItemsMode1: 60 }
+    const variants = []
+
+    // Variant A: minimal schema used by several LinkedIn actors.
+    variants.push(location ? { ...base, searchJobsLocation: location } : { ...base })
+
+    // Variant B: custom location key variant.
+    variants.push(location ? { ...base, searchJobsLocationCustom: location } : { ...base })
+
+    // Variant C: legacy key names for some community actors.
+    variants.push(location ? { keywords: q, location, maxItems: 25 } : { keywords: q, maxItems: 25 })
+
+    return variants
+  }
+
   const allJobsMap = new Map()
+  const errors = []
+  let anyActorSucceeded = false
 
   for (const actorId of actorIds) {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 15000)
+    let actorHadSuccess = false
 
     for (const q of uniqueQueries) {
-      try {
-        const body = {
-          operationMode: 'searchJobs',
-          searchJobsKeywords: q,
-          searchJobsGeoCode: location ? undefined : 'US',
-          searchJobsLocationCustom: location || undefined,
-          maxItemsMode1: 25,
-          filterPostedWithinDays: 28,
-        }
+      const payloadVariants = getPayloadVariants(actorId, q, location)
 
-        const response = await fetch(`https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${keys.apify}&timeoutSecs=20`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        })
+      for (const body of payloadVariants) {
+        try {
+          const response = await fetch(`https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${keys.apify}&timeoutSecs=30`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          })
 
-        if (!response.ok) {
-          if (response.status === 404) continue
-          const errBody = await response.text().catch(() => '')
-          throw new Error(`${actorId} error: ${response.status} ${errBody.slice(0, 100)}`)
-        }
-
-        const data = await response.json()
- itemsArray.isArray(data) ? data : data.items || []
-
-        for (const item of items) {
-          const job = item
-          const key = `${job.title || job.job_title || ''}|${job.company || job.company_name || ''}`.toLowerCase()
-          if (!allJobsMap.has(key)) {
-            allJobsMap.set(key, {
-              job_title: job.title || job.job_title || '',
-              employer_name: job.company || job.company_name || '',
-              employer_logo: job.company_logo || job.companyLogo || null,
-              employer_website: job.company_linkedin_url || '',
-              job_employment_type: '',
-              job_apply_link: job.job_url || job.url || '',
-              job_description: job.job_description || job.description || '',
-              job_is_remote: /remote/i.test(String(job.remote || '')) || /remote/i.test(String(job.title || '')),
-              job_posted_at_timestamp: job.posted_time ? new Date(String(job.posted_time)).getTime() / 1000 : Date.now() / 1000,
-              job_city: job.location ? String(job.location).split(',')[0]?.trim() : null,
-              job_state: null,
-              job_country: '',
-              job_required_skills: (Array.isArray(job.skills) ? job.skills : []) || [],
-              job_salary_currency: null,
-              job_salary_period: null,
-              job_min_salary: null,
-              job_max_salary: null,
-              source: 'LinkedIn',
-            })
+          if (!response.ok) {
+            if (response.status === 404) continue
+            const errBody = await response.text().catch(() => '')
+            throw new Error(`${actorId} error: ${response.status} ${errBody.slice(0, 160)}`)
           }
+
+          const data = await response.json()
+          const items = Array.isArray(data) ? data : data.items || []
+          actorHadSuccess = true
+
+          for (const item of items) {
+            const job = item
+            const key = `${job.title || job.job_title || ''}|${job.company || job.company_name || ''}`.toLowerCase()
+            if (!allJobsMap.has(key)) {
+              allJobsMap.set(key, {
+                job_title: job.title || job.job_title || '',
+                employer_name: job.company || job.company_name || '',
+                employer_logo: job.company_logo || job.companyLogo || null,
+                employer_website: job.company_linkedin_url || '',
+                job_employment_type: '',
+                job_apply_link: job.job_url || job.url || '',
+                job_description: job.job_description || job.description || '',
+                job_is_remote: /remote/i.test(String(job.remote || '')) || /remote/i.test(String(job.title || '')),
+                job_posted_at_timestamp: job.posted_time ? new Date(String(job.posted_time)).getTime() / 1000 : Date.now() / 1000,
+                job_city: job.location ? String(job.location).split(',')[0]?.trim() : null,
+                job_state: null,
+                job_country: '',
+                job_required_skills: (Array.isArray(job.skills) ? job.skills : []) || [],
+                job_salary_currency: null,
+                job_salary_period: null,
+                job_min_salary: null,
+                job_max_salary: null,
+                source: 'LinkedIn',
+              })
+            }
+          }
+          break
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            errors.push(`${actorId} timeout`)
+            continue
+          }
+          errors.push(error instanceof Error ? error.message : `Unknown ${actorId} error`)
+          continue
         }
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          clearTimeout(timeoutId)
-          return res.status(500).json({ error: 'LinkedIn search timed out after 15s.' })
-        }
-        continue
       }
     }
 
     clearTimeout(timeoutId)
-    break
+    if (actorHadSuccess) {
+      anyActorSucceeded = true
+      if (allJobsMap.size > 0) break
+    }
   }
 
   const jobs = Array.from(allJobsMap.values())
-  res.json({ jobs })
+  if (jobs.length > 0) return res.json({ jobs })
+
+  if (!anyActorSucceeded) {
+    return res.status(500).json({
+      error: `LinkedIn search failed. ${errors[0] || 'All actors unavailable.'}`,
+    })
+  }
+
+  return res.json({ jobs: [] })
 }
 
 async function searchWithYC(req, res) {
@@ -352,7 +399,7 @@ async function searchWithYC(req, res) {
   const timeoutId = setTimeout(() => controller.abort(), 8000)
 
   try {
-    const response = await fetch('https://api.ycombinator.com/v0.1/companies?limit=50&hiring=true', { signal: controller.signal })
+    const response = await fetch('https://api.ycombinator.com/v0.1/companies?limit=200&hiring=true', { signal: controller.signal })
 
     if (!response.ok) {
       throw new Error(`YC API error: ${response.status}`)
@@ -361,16 +408,46 @@ async function searchWithYC(req, res) {
     let data
     try { data = await response.json() }
     catch { throw new Error('Invalid JSON from YC API') }
-    const companies = data.companies || []
+    const companies = Array.isArray(data?.companies)
+      ? data.companies
+      : Array.isArray(data)
+        ? data
+        : []
+
+    const terms = String(query || '')
+      .toLowerCase()
+      .split(/\s+/)
+      .map(t => t.trim())
+      .filter(Boolean)
+
+    const designAliases = ['designer', 'design', 'ui', 'ux', 'product', 'graphic', 'visual', 'brand', 'figma']
+    const expandedTerms = [...new Set([...terms, ...terms.flatMap(t => {
+      if (t === 'ui/ux' || t === 'ux/ui') return ['ui', 'ux', 'designer']
+      if (t === 'product') return ['product', 'designer']
+      if (t === 'design') return designAliases
+      return []
+    })])]
 
     const filtered = companies.filter((c) => {
-      if (!query) return true
-      const haystack = `${c.name || ''} ${c.oneLiner || ''} ${c.tags?.join(' ') || ''}`.toLowerCase()
-      const terms = query.toLowerCase().split(/\s+/)
-      return terms.some((term) => haystack.includes(term))
+      if (expandedTerms.length === 0) return true
+      const haystack = [
+        c.name,
+        c.oneLiner,
+        c.one_liner,
+        c.longDescription,
+        c.long_description,
+        Array.isArray(c.tags) ? c.tags.join(' ') : '',
+        Array.isArray(c.industries) ? c.industries.join(' ') : '',
+        Array.isArray(c.keywords) ? c.keywords.join(' ') : '',
+      ].join(' ').toLowerCase()
+
+      const matched = expandedTerms.filter(term => haystack.includes(term)).length
+      return matched >= 1
     })
 
-    const jobs = filtered.map((c) => ({
+    const ycList = filtered.length >= 8 ? filtered : (filtered.length > 0 ? [...filtered, ...companies].slice(0, 40) : companies.slice(0, 40))
+
+    const jobs = ycList.map((c) => ({
       job_title: c.oneLiner || 'Open position at ' + (c.name || 'YC startup'),
       employer_name: c.name || 'YC Startup',
       employer_logo: c.smallLogoUrl || null,
@@ -409,7 +486,10 @@ async function searchWithAdzuna(req, res, keys) {
   }
 
   const { query, location, date_posted } = req.body
-  const parts = keys.adzuna.split(':')
+  const normalized = String(keys.adzuna).trim()
+    .replace(/[|,;\s]+/g, ':')
+    .replace(/:+/g, ':')
+  const parts = normalized.split(':').filter(Boolean)
   const appId = parts[0] || ''
   const appKey = parts[1] || ''
   if (!appId || !appKey) {
@@ -420,7 +500,7 @@ async function searchWithAdzuna(req, res, keys) {
   const timeoutId = setTimeout(() => controller.abort(), 8000)
 
   try {
-    const params = new URLSearchParams({ app_id: appId, app_key: appKey, results_per_page: '20', what: query || '' })
+    const params = new URLSearchParams({ app_id: appId, app_key: appKey, results_per_page: '50', what: query || '' })
     if (location) params.set('where', location)
     if (date_posted) {
       const daysMap = { today: '1', '3days': '3', week: '7', month: '30' }
