@@ -47,6 +47,8 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
   const [searchLocation, setSearchLocation] = useState('')
   const [searchRemote, setSearchRemote] = useState(true)
   const [searchSource, setSearchSource] = useState('jsearch')
+  const [designFocus, setDesignFocus] = useState(true)
+  const [jobType, setJobType] = useState('all')
   const [datePosted, setDatePosted] = useState('all')
   const [workArrangement, setWorkArrangement] = useState<'any' | 'remote' | 'hybrid' | 'office'>('any')
   const [searching, setSearching] = useState(false)
@@ -68,6 +70,26 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
   }, [initialSearchResults])
 
   const { latest: latestResume } = useResumes()
+
+  const DESIGN_TERMS = [
+    'designer',
+    'ui',
+    'ux',
+    'product design',
+    'graphic design',
+    'visual design',
+    'brand design',
+    'figma',
+  ]
+
+  function buildDesignQuery(base: string) {
+    const q = (base || '').trim()
+    if (!q) return q
+    if (!designFocus) return q
+    const lower = q.toLowerCase()
+    const hasDesignSignal = DESIGN_TERMS.some(term => lower.includes(term))
+    return hasDesignSignal ? q : `${q} designer`
+  }
 
   function handleSaveResult(result: SearchResult) {
     const compensation = result.job_min_salary && result.job_max_salary
@@ -113,11 +135,13 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
         searchSource === 'jooble' ? searchJobsJooble :
         searchSource === 'jobicy' ? searchJobsJobicy :
         searchJobs
+      const query = buildDesignQuery(searchQuery)
       const data = await searchFn({
-        query: searchQuery,
+        query,
         location: searchLocation || undefined,
         remote_only: searchRemote || undefined,
         date_posted: datePosted !== 'all' ? datePosted : undefined,
+        job_type: jobType !== 'all' ? jobType : undefined,
       })
       setSearchResults(data.jobs || [])
       setCurrentPage(1)
@@ -251,12 +275,13 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
     <>
       <form onSubmit={handleSearch} className="controls">
         <select className="filter-select" value={searchSource} onChange={e => setSearchSource(e.target.value)}>
-          <option value="jsearch">JSearch {apiStatus.jsearch ? '' : '(needs key)'}</option>
-          <option value="apify">Apify {apiStatus.apify ? '' : '(needs key)'}</option>
-          <option value="adzuna">Adzuna {apiStatus.adzuna ? '' : '(needs key)'}</option>
-          <option value="jooble">Jooble {apiStatus.jooble ? '' : '(needs key)'}</option>
+          <option value="jsearch">JSearch {apiStatus.jsearch ? '' : '(key required)'}</option>
+          <option value="linkedin">LinkedIn {apiStatus.linkedin ? '' : '(uses Apify key)'}</option>
+          <option value="apify">Indeed (Apify) {apiStatus.apify ? '' : '(key required)'}</option>
+          <option value="adzuna">Adzuna {apiStatus.adzuna ? '' : '(key required)'}</option>
+          <option value="jooble">Jooble {apiStatus.jooble ? '' : '(key required)'}</option>
           <option value="jobicy">Jobicy (free)</option>
-          <option value="yc">YC Jobs (free)</option>
+          <option value="yc">YC Startups (free)</option>
         </select>
         <div className="search-wrap">
           <span className="search-icon">&#128269;</span>
@@ -264,7 +289,7 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search roles, companies, skills..."
+            placeholder="Search role, company, or skill (e.g. Product Designer, Figma, Brand Design)"
             required
           />
         </div>
@@ -297,6 +322,18 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
           ))}
         </div>
         <select
+          value={jobType}
+          onChange={e => setJobType(e.target.value)}
+          style={{ padding: '6px 8px', borderRadius: 0, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 10, outline: 'none', cursor: 'pointer', fontWeight: 500 }}
+          title="Job type"
+        >
+          <option value="all">Any type</option>
+          <option value="FULLTIME">Full-time</option>
+          <option value="PARTTIME">Part-time</option>
+          <option value="CONTRACTOR">Contract</option>
+          <option value="INTERN">Internship</option>
+        </select>
+        <select
           value={datePosted}
           onChange={e => setDatePosted(e.target.value)}
           style={{ padding: '6px 8px', borderRadius: 0, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 10, outline: 'none', cursor: 'pointer', fontWeight: 500 }}
@@ -307,6 +344,18 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
           <option value="week">7 days</option>
           <option value="month">30 days</option>
         </select>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          onClick={() => setDesignFocus(prev => !prev)}
+          title="Auto-bias searches toward design roles"
+          style={{
+            borderColor: designFocus ? 'var(--accent)' : 'var(--border)',
+            color: designFocus ? 'var(--accent)' : 'var(--text-2)',
+          }}
+        >
+          {designFocus ? 'Design Focus: On' : 'Design Focus: Off'}
+        </button>
         <button type="submit" className="btn btn-primary btn-sm" disabled={searching}>
           {searching ? <><span className="spinner"></span> Searching...</> : 'Search'}
         </button>
@@ -380,7 +429,7 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
         <div style={{ marginBottom: 20 }}>
           <div className="stats-bar">
             <span>{searchResults.length} results from <strong>{{
-              jsearch: 'JSearch', apify: 'Apify', yc: 'YC Jobs',
+              jsearch: 'JSearch', linkedin: 'LinkedIn', apify: 'Indeed (Apify)', yc: 'YC Jobs',
               adzuna: 'Adzuna', jooble: 'Jooble', jobicy: 'Jobicy',
             }[searchSource] || searchSource}</strong></span>
           </div>
@@ -479,8 +528,17 @@ export default function JobsView({ jobs, applications, onAddApplication, onDelet
       {pageJobs.length === 0 ? (
         <div className="empty-state">
           <div className="icon">&#128188;</div>
-          <h3>No jobs tracked yet</h3>
-          <p>Search for jobs above and save them to your dashboard.</p>
+          {jobs.length > 0 ? (
+            <>
+              <h3>No jobs match your filters</h3>
+              <p>Try changing the work arrangement or search query to see more results.</p>
+            </>
+          ) : (
+            <>
+              <h3>No jobs tracked yet</h3>
+              <p>Search for jobs above and save them to your dashboard.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="job-grid">

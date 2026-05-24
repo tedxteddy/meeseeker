@@ -10,6 +10,7 @@ interface SettingsProps {
 const API_PROVIDERS = [
   { key: 'jsearch', label: 'JSearch (RapidAPI)', placeholder: 'Your RapidAPI key', help: 'Free 500 searches/month. Get from rapidapi.com', link: 'https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch', badge: '(needs key)', free: false },
   { key: 'apify', label: 'Apify (Indeed Scraper)', placeholder: 'apify_api_...', help: 'Scrapes Indeed listings. Get from console.apify.com', link: 'https://console.apify.com/account#/integrations', badge: '(needs key)', free: false },
+  { key: 'linkedin', label: 'LinkedIn Jobs (via Apify)', placeholder: '', help: 'Scrapes LinkedIn listings using your Apify API key.', link: 'https://console.apify.com/account#/integrations', badge: '(uses Apify key)', free: true },
   { key: 'openai', label: 'OpenAI (Resume AI)', placeholder: 'sk-proj-...', help: 'AI-powered resume parsing.', link: 'https://platform.openai.com/api-keys', badge: '(needs key)', free: false },
   { key: 'adzuna', label: 'Adzuna', placeholder: 'app_id:app_key', help: 'Free tier available (50 calls/day). Get from developer.adzuna.com', link: 'https://developer.adzuna.com/account', badge: '(needs key)', free: false },
   { key: 'jooble', label: 'Jooble', placeholder: 'Your Jooble API key', help: 'Free 100 searches/day. Get from jooble.org/api', link: 'https://jooble.org/api', badge: '(needs key)', free: false },
@@ -64,7 +65,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
   function handleNotionToggle(enabled: boolean) {
     const newNotion = { ...notion, enabled }
     setNotion(newNotion)
-    saveNotionConfig(newNotion)
+    try { localStorage.setItem('notion_enabled', String(enabled)) } catch { /* ignore */ }
     if (enabled && onNotionSync) onNotionSync()
   }
 
@@ -234,7 +235,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
               )}
             </div>
 
-            <div style={{ background: 'var(--surface-2)', borderRadius: 0, padding: 14 }}>
+            <div style={{ background: 'var(--surface-2)', borderRadius: 0, padding: 14, marginBottom: 12 }}>
               <h4 style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Database Properties Required</h4>
               <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>
                 Create these properties in your Notion database:
@@ -247,6 +248,20 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
                 ))}
               </div>
             </div>
+
+            <details style={{ fontSize: 11, color: 'var(--text-2)', cursor: 'pointer' }}>
+              <summary style={{ fontWeight: 600, fontSize: 12, marginBottom: 6, color: 'var(--text)' }}>
+                &#128161; Notion Job Hunt Tips
+              </summary>
+              <div style={{ padding: '10px 0', lineHeight: 1.6 }}>
+                <p><strong>Track everything in one place.</strong> Use Meeseeker to push jobs and applications to Notion, so all your research lives alongside your notes, interview prep, and networking contacts.</p>
+                <p><strong>Create views for each stage.</strong> In Notion, create linked database views filtered by Stage: "To Apply", "Applied", "Interviewing", "Offer", "Rejected". Quick way to see your pipeline at a glance.</p>
+                <p><strong>Use Tags for company research.</strong> The Tags multi-select helps you categorize — e.g. "startup", "fintech", "series-a", "remote-friendly". Then filter your database by tag to find similar roles.</p>
+                <p><strong>Automate with formulas.</strong> Add a formula property to calculate days since Applied Date, or auto-assign a "Priority" based on Fit Score &times; Probability. Keeps you focused on the best opportunities.</p>
+                <p><strong>Share with your network.</strong> Share your Notion database view with a mentor or peer for visibility into your search. A shared read-only link works great for accountability.</p>
+                <p><strong>Complement with templates.</strong> Use a Notion job hunt template as your base, then map the columns to match the properties above. Many free templates are available on Notion's template gallery.</p>
+              </div>
+            </details>
           </>
         )}
 

@@ -179,7 +179,7 @@ export default function ResumeView({ onAutoSearch }: ResumeViewProps = {}) {
   useEffect(() => {
     if (text.length > 100 && detectedIndustry && !latestResume && autoSearchRef.current !== text) {
       autoSearchRef.current = text
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         const saved = saveResume({
           text_content: text,
           file_name: 'Pasted resume',
@@ -195,7 +195,22 @@ export default function ResumeView({ onAutoSearch }: ResumeViewProps = {}) {
           parent_id: null,
           tags: [],
         })
-        if (saved) handleFindJobs()
+        if (saved) {
+          setSearchingJobs(true)
+          setSearchJobsError('')
+          try {
+            const results = await findJobsFromResume(detectedIndustry, [])
+            if (results.total_found === 0) {
+              setSearchJobsError('No jobs found. Try a different resume or update your skills.')
+            } else {
+              onAutoSearch?.(results)
+            }
+          } catch (err: unknown) {
+            setSearchJobsError(err instanceof Error ? err.message : 'Search failed')
+          } finally {
+            setSearchingJobs(false)
+          }
+        }
       }, 500)
       return () => clearTimeout(timer)
     }
@@ -328,7 +343,10 @@ portfolio.com | behance.net/johndoe | dribbble.com/johndoe`
   }
 
   async function handleFindJobs() {
-    if (!latestResume) return
+    if (!latestResume) {
+      setSearchJobsError('Analyse your resume first before searching for jobs.')
+      return
+    }
     setSearchingJobs(true)
     setSearchJobsError('')
     try {

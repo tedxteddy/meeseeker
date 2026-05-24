@@ -1,4 +1,5 @@
 const API_BASE = '/api'
+const CACHE_TTL = 5 * 60 * 1000
 
 function getApiKeys() {
   return {
@@ -12,7 +13,40 @@ function getApiKeys() {
   }
 }
 
+function cacheKey(params: Record<string, unknown>): string {
+  const parts = ['query', 'source', 'location', 'remote_only', 'date_posted', 'job_type']
+  const str = parts.map(k => `${k}=${params[k] ?? ''}`).join('|')
+  return `search_cache:${str}`
+}
+
+function cacheGet<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const entry = JSON.parse(raw)
+    if (Date.now() - entry.ts > CACHE_TTL) {
+      localStorage.removeItem(key)
+      return null
+    }
+    return entry.data as T
+  } catch {
+    return null
+  }
+}
+
+function cacheSet<T>(key: string, data: T) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }))
+  } catch (e) {
+    console.warn('Cache write failed:', e)
+  }
+}
+
 export async function searchJobs(params: Record<string, unknown>) {
+  const key = cacheKey(params)
+  const cached = cacheGet<{ jobs: unknown[] }>(key)
+  if (cached) return cached
+
   const keys = getApiKeys()
   const response = await fetch(`${API_BASE}/jobs/search`, {
     method: 'POST',
@@ -27,7 +61,9 @@ export async function searchJobs(params: Record<string, unknown>) {
   }
 
   try {
-    return await response.json()
+    const data = await response.json()
+    if (data.jobs && data.jobs.length > 0) cacheSet(key, data)
+    return data
   } catch {
     throw new Error('Invalid JSON response from server')
   }
@@ -51,6 +87,10 @@ export async function searchJobsJooble(params: Record<string, unknown>) {
 
 export async function searchJobsJobicy(params: Record<string, unknown>) {
   return searchJobs({ ...params, source: 'jobicy' })
+}
+
+export async function searchJobsLinkedIn(params: Record<string, unknown>) {
+  return searchJobs({ ...params, source: 'linkedin' })
 }
 
 export async function analyseResume(text: string, fileName = 'Uploaded resume', aiProvider?: string) {
@@ -83,6 +123,7 @@ export function getApiKeyStatus() {
   return {
     jsearch: !!keys.jsearch,
     apify: !!keys.apify,
+    linkedin: !!keys.apify,
     openai: !!keys.openai,
     adzuna: !!keys.adzuna,
     jooble: !!keys.jooble,
@@ -94,7 +135,7 @@ export function getApiKeyStatus() {
 
 export function getJobApiCount() {
   const s = getApiKeyStatus()
-  return [s.jsearch, s.apify, s.adzuna, s.jooble, s.jobicy].filter(Boolean).length
+  return [s.jsearch, s.apify, s.linkedin, s.adzuna, s.jooble, s.jobicy].filter(Boolean).length
 }
 
 export async function scrapeEmails(url: string): Promise<string[]> {
@@ -147,37 +188,64 @@ export async function findJobsFromResume(
   location?: string
 ): Promise<AutoSearchResult> {
   const status = getApiKeyStatus()
-  const query = bestFit || skills.slice(0, 3).map(s => s.name).join(' ')
-  const skillTerms = skills.filter(s => s.current >= 50).slice(0, 5).map(s => s.name)
+  const roleBase = (bestFit || '').trim()
+  const strongSkills = skills.filter(s => s.current >= 50).slice(0, 4).map(s => s.name)
+  const rawQuery = roleBase || strongSkills.join(' ') || 'designer'
+  const lower = rawQuery.toLowerCase()
+  const hasDesignSignal = [
+    'design', 'designer', 'ui', 'ux', 'figma', 'brand', 'visual', 'graphic', 'product'
+  ].some(token => lower.includes(token))
+  const query = hasDesignSignal ? rawQuery : `${rawQuery} designer`
 
   const sources = [
-    { key: 'jsearch', fn: () => searchJobs({ query, location, remote_only: true }), hasKey: status.jsearch },
-    { key: 'yc', fn: () => searchJobsYC({ query, location }), hasKey: true },
-    { key: 'adzuna', fn: () => searchJobsAdzuna({ query, location }), hasKey: status.adzuna },
-    { key: 'jooble', fn: () => searchJobsJooble({ query, location }), hasKey: status.jooble },
-    { key: 'jobicy', fn: () => searchJobsJobicy({ query }), hasKey: true },
-    { key: 'apify', fn: () => searchJobsApify({ query, location }), hasKey: status.apify },
+    { key: 'jsearch', fn: (q: string, loc?: string) => searchJobs({ query: q, location: loc, remote_only: true }), hasKey: status.jsearch },
+    { key: 'yc', fn: (q: string, loc?: string) => searchJobsYC({ query: q, location: loc }), hasKey: true },
+    { key: 'linkedin', fn: (q: string, loc?: string) => searchJobsLinkedIn({ query: q, location: loc }), hasKey: status.linkedin },
+    { key: 'adzuna', fn: (q: string, loc?: string) => searchJobsAdzuna({ query: q, location: loc }), hasKey: status.adzuna },
+    { key: 'jooble', fn: (q: string, loc?: string) => searchJobsJooble({ query: q, location: loc }), hasKey: status.jooble },
+    { key: 'jobicy', fn: (q: string) => searchJobsJobicy({ query: q }), hasKey: true },
+    { key: 'apify', fn: (q: string, loc?: string) => searchJobsApify({ query: q, location: loc }), hasKey: status.apify },
   ]
 
   const availableSources = sources.filter(s => s.hasKey)
-  const results = await Promise.allSettled(availableSources.map(s => s.fn()))
 
-  const allJobs: AutoSearchResult['jobs'] = []
-  const sourcesWithResults: string[] = []
-  const errors: string[] = []
+  async function searchWithRetry(q: string, loc?: string) {
+    const results = await Promise.allSettled(availableSources.map(s => s.fn(q, loc)))
+    const jobs: AutoSearchResult['jobs'] = []
+    const zeroResults: typeof availableSources = []
+    const errors: string[] = []
 
-  results.forEach((result, i) => {
-    const src = availableSources[i]
-    if (result.status === 'fulfilled' && result.value.jobs?.length > 0) {
-      sourcesWithResults.push(src.key)
-      allJobs.push(...result.value.jobs)
-    } else if (result.status === 'rejected') {
-      errors.push(`${src.key}: ${result.reason?.message || result.reason}`)
+    results.forEach((result, i) => {
+      const src = availableSources[i]
+      if (result.status === 'fulfilled' && result.value.jobs?.length > 0) {
+        jobs.push(...result.value.jobs)
+      } else if (result.status === 'fulfilled' && result.value.jobs?.length === 0) {
+        zeroResults.push(src)
+      } else if (result.status === 'rejected') {
+        errors.push(`${src.key}: ${result.reason?.message || result.reason || 'Unknown error'}`)
+      }
+    })
+
+    if (zeroResults.length > 0 && q.split(' ').length > 1) {
+      const broader = q.split(' ').slice(0, -1).join(' ') || q.split(' ')[0]
+      const retryResults = await Promise.allSettled(zeroResults.map(s => s.fn(broader, loc)))
+      retryResults.forEach((result, i) => {
+        const src = zeroResults[i]
+        if (result.status === 'fulfilled' && result.value.jobs?.length > 0) {
+          jobs.push(...result.value.jobs)
+        } else if (result.status === 'rejected') {
+          errors.push(`${src.key} (retry): ${result.reason?.message || result.reason || 'Unknown error'}`)
+        }
+      })
     }
-  })
+
+    return { jobs, errors }
+  }
+
+  const { jobs: rawJobs, errors } = await searchWithRetry(query, location)
 
   const seen = new Set<string>()
-  const deduped = allJobs.filter(j => {
+  const deduped = rawJobs.filter(j => {
     const key = `${j.job_title}|${j.employer_name}`.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
@@ -185,9 +253,11 @@ export async function findJobsFromResume(
   })
 
   const prioritized = deduped.sort((a, b) => {
-    const order = ['jsearch', 'adzuna', 'jooble', 'apify', 'jobicy', 'YC']
+    const order = ['jsearch', 'adzuna', 'linkedin', 'jooble', 'apify', 'jobicy', 'YC']
     return (order.indexOf(a.source) - order.indexOf(b.source))
   })
+
+  const sourcesWithResults = [...new Set(prioritized.map(j => j.source))]
 
   return {
     jobs: prioritized,

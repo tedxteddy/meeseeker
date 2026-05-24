@@ -19,9 +19,16 @@
 - View uploaded resume in-app (#6): Preview button opens original PDF in new tab
 - Free hosting setup (#4): render.yaml, start:prod script, Express serves built frontend in production
 - Mobile-friendly responsive UI (#8): bottom nav with 6 tabs, active indicator bar, tab label in mobile header, compact cards, fadeSlideIn transitions
-- Floating "Add Resume" button (bottom-right, bobbing animation)
-- QR code to open app on mobile (local network IP)
-- Auto job search from resume (paste → auto-analyze → auto-find jobs)
+- Vercel deployment: api/index.js, vercel.json, guarded server listen/static serving
+- Apify search: 12s timeout per actor, 3 fallback actors with independent timeouts
+- YC search: 8s timeout
+- Date filter: dropdown (24h, 3d, 7d, 30d) for JSearch + Adzuna
+- Per-source timeouts added: JSearch (8s), Apify (12s), YC (8s), Adzuna (8s), Jooble (8s), Jobicy (8s)
+- Notion proxy timeout: AbortSignal.timeout(15000)
+- Resume AI parser timeouts: AbortSignal.timeout(20000) on OpenAI/Claude/Gemini
+- localStorage search cache: 5-min TTL, keyed by query+source+location+remote_only+date_posted+job_type
+- Notion tips documentation: collapsible guide in Settings with 6 job-hunt tips
+- Bug sweep: fixed 16 issues (5 high, 11 medium) including auto-search from paste, Apify race condition, empty cache, date_posted/Adzuna key validation, API 404 handler, misleading empty state, Notion toggle premature save
 
 ### Previously Completed
 - Adzuna, Jooble, Jobicy, Claude, Gemini added as API providers in Settings with (needs key)/(free) badges

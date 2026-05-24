@@ -1,4 +1,5 @@
 const API_BASE = '/api'
+const NOTION_TIMEOUT = 25000
 
 export interface NotionConfig {
   enabled: boolean
@@ -64,6 +65,7 @@ export async function verifyNotionConnection(apiKey: string, databaseId: string)
   try {
     const response = await fetch(`${API_BASE}/notion/databases/${databaseId}`, {
       headers: proxyHeaders(apiKey),
+      signal: AbortSignal.timeout(NOTION_TIMEOUT),
     })
 
     if (!response.ok) {
@@ -85,6 +87,7 @@ export async function createNotionJobPage(apiKey: string, databaseId: string, jo
     const response = await fetch(`${API_BASE}/notion/pages`, {
       method: 'POST',
       headers: proxyHeaders(apiKey),
+      signal: AbortSignal.timeout(NOTION_TIMEOUT),
       body: JSON.stringify({
         parent: { database_id: databaseId },
         properties: {
@@ -142,6 +145,7 @@ export async function updateNotionApplication(apiKey: string, pageId: string, up
     const response = await fetch(`${API_BASE}/notion/pages/${pageId}`, {
       method: 'PATCH',
       headers: proxyHeaders(apiKey),
+      signal: AbortSignal.timeout(NOTION_TIMEOUT),
       body: JSON.stringify({ properties }),
     })
 
@@ -157,6 +161,7 @@ export async function searchNotionJobs(apiKey: string, databaseId: string): Prom
     const response = await fetch(`${API_BASE}/notion/databases/${databaseId}/query`, {
       method: 'POST',
       headers: proxyHeaders(apiKey),
+      signal: AbortSignal.timeout(NOTION_TIMEOUT),
       body: JSON.stringify({
         sorts: [{ timestamp: 'created_time', direction: 'descending' }],
         page_size: 100,
