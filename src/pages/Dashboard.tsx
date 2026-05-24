@@ -8,18 +8,55 @@ import NetworkView from '../components/NetworkView'
 import GrowthView from '../components/GrowthView'
 import Settings from '../components/Settings'
 import Onboarding from '../components/Onboarding'
-import { getApiKeyStatus } from '../lib/api'
+import { getApiKeyStatus, type AutoSearchResult } from '../lib/api'
 import { getNotionConfig, syncJobsToNotion, updateNotionApplication } from '../lib/notion'
 
 import Logo from '../components/Logo'
 
+function QRModal({ onClose, url }: { onClose: () => void; url: string }) {
+  const [localIp, setLocalIp] = useState('')
+  useEffect(() => {
+    fetch('/api/network-ip').then(r => r.json()).then(d => {
+      const isLocalhost = d.ip === '127.0.0.1' || d.ip === '::1' || d.ip === 'localhost'
+      setLocalIp(isLocalhost ? window.location.hostname : d.ip)
+    }).catch(() => setLocalIp(window.location.hostname))
+  }, [])
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0, padding: 28, maxWidth: 340, width: '100%', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700 }}>Open on Mobile</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-2)', fontSize: 20, cursor: 'pointer' }}>&times;</button>
+        </div>
+        <img
+          src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`}
+          alt="QR Code"
+          style={{ borderRadius: 0, margin: '0 auto 12px', display: 'block', border: '1px solid var(--border)' }}
+        />
+        <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>Scan with your phone camera</p>
+        {localIp && (
+          <p style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: 'monospace', background: 'var(--surface-2)', padding: '6px 10px', borderRadius: 0 }}>
+            {url}
+          </p>
+        )}
+        <p style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 12 }}>
+          Make sure your phone is on the same Wi-Fi network
+        </p>
+        <button className="btn btn-primary btn-sm" onClick={onClose} style={{ marginTop: 16, width: '100%' }}>
+          Done
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const TABS = [
-  { key: 'jobs', label: 'Jobs' },
-  { key: 'resume', label: 'Resume Match' },
-  { key: 'improve', label: 'Improve' },
-  { key: 'pipeline', label: 'Pipeline' },
-  { key: 'network', label: 'Network' },
-  { key: 'growth', label: 'Growth' },
+  { key: 'jobs', label: 'Jobs', icon: '&#128269;' },
+  { key: 'resume', label: 'Resume', icon: '&#128196;' },
+  { key: 'improve', label: 'Improve', icon: '&#128200;' },
+  { key: 'pipeline', label: 'Pipeline', icon: '&#128203;' },
+  { key: 'network', label: 'Network', icon: '&#128101;' },
+  { key: 'growth', label: 'Growth', icon: '&#128200;' },
 ]
 
 export default function Dashboard() {
@@ -27,11 +64,14 @@ export default function Dashboard() {
   const [showSettings, setShowSettings] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [notionSyncing, setNotionSyncing] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
   const [notionStatus, setNotionStatus] = useState<{ synced: number; failed: number } | null>(null)
+  const [autoSearchResults, setAutoSearchResults] = useState<AutoSearchResult | null>(null)
   const { jobs, addJob, deleteJob, refresh: refreshJobs } = useJobs()
   const { applications, addApplication, updateStage, deleteApplication } = useApplications()
   const { targets, logSent, logReply } = useNetworkTargets()
   const apiStatus = getApiKeyStatus()
+  const totalApis = Object.keys(apiStatus).length
   const activeApis = Object.values(apiStatus).filter(Boolean).length
   const notionConfig = getNotionConfig()
 
@@ -67,12 +107,13 @@ export default function Dashboard() {
         <div className="logo">
           <Logo size={34} />
           <span>Meeseeker</span>
+          <span className="mobile-tab-label">/ {TABS.find(t => t.key === activeTab)?.label || ''}</span>
           <small>Job Tracker</small>
         </div>
         <div className="header-actions">
-          <span className="badge"><strong>{jobs.length}</strong> tracked</span>
-          <span className="badge"><strong>{applications.length}</strong> applied</span>
-          <span className="badge">{activeApis}/3 APIs</span>
+          <span className="badge desktop-only"><strong>{jobs.length}</strong> tracked</span>
+          <span className="badge desktop-only"><strong>{applications.length}</strong> applied</span>
+          <span className="badge desktop-only">{activeApis}/{totalApis} APIs</span>
           {notionConfig.enabled && (
             <button
               className="btn btn-outline btn-sm"
@@ -90,6 +131,9 @@ export default function Dashboard() {
               )}
             </button>
           )}
+          <button className="btn btn-outline btn-sm" onClick={() => setShowQRModal(true)} style={{ fontSize: 16, padding: '6px 10px' }} title="Open on Mobile">
+            &#9743; QR
+          </button>
           <button className="btn btn-outline btn-sm" onClick={() => setShowSettings(true)}>
             &#9881; Settings
           </button>
@@ -108,12 +152,20 @@ export default function Dashboard() {
         ))}
       </nav>
 
-      <div className="container">
+      <div className="container tab-content">
         {activeTab === 'jobs' && (
-          <JobsView jobs={jobs} applications={applications} onAddApplication={addApplication} onDeleteJob={deleteJob} onJobImported={refreshJobs} />
+          <JobsView
+            jobs={jobs}
+            applications={applications}
+            onAddApplication={addApplication}
+            onDeleteJob={deleteJob}
+            onJobImported={refreshJobs}
+            initialSearchResults={autoSearchResults}
+            onClearAutoResults={() => setAutoSearchResults(null)}
+          />
         )}
         {activeTab === 'resume' && (
-          <ResumeView />
+          <ResumeView onAutoSearch={(results) => { setAutoSearchResults(results); setActiveTab('jobs') }} />
         )}
         {activeTab === 'improve' && (
           <ResumeImprovementView />
@@ -129,7 +181,23 @@ export default function Dashboard() {
         )}
       </div>
 
-      {showSettings && <Settings onClose={() => setShowSettings(false)} onNotionSync={handleNotionSync} />}
+      <button className="floating-add-btn" onClick={() => setActiveTab('resume')} title="Add Resume">
+          +
+        </button>
+
+        <nav className="bottom-nav">
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              className={`bottom-nav-item ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.key)}
+              dangerouslySetInnerHTML={{ __html: `${tab.icon}<span>${tab.label}</span>` }}
+            />
+          ))}
+        </nav>
+
+        {showQRModal && <QRModal onClose={() => setShowQRModal(false)} url={window.location.origin} />}
+        {showSettings && <Settings onClose={() => setShowSettings(false)} onNotionSync={handleNotionSync} />}
       </div>
     </>
   )

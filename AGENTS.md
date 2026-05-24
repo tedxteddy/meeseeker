@@ -3,21 +3,47 @@
 ### Sessions
 - Branch: `session-may2026-ux-automation` -> master on meeseeker
 - Repo: https://github.com/tedxteddy/meeseeker
-- To restore: `gh repo clone tedxteddy/meeseeker && cd meeseeker && npm i && npm start`
+- To restore: `git pull && git checkout session-may2026-ux-automation && npm i && npm start`
 
-### Current TODO
-- Fix YC Jobs search (endpoint may be outdated)
-- Auto job search from resume (paste → auto-analyze → auto-find jobs)
-- Floating "Add Resume" button (bottom-right, bobbing animation)
-- View uploaded resume in-app
-- Modern design refresh (user has reference site)
-- Better APIs (Adzuna, Claude/Groq/Gemini)
+### Current TODO (estimate: ~4h total)
+1. **Fix Apify search** — broken endpoint, slow response (~30min)
+2. **Fix YC search** — slow/timing out (~20min)
+3. **Fix "Find Jobs" from resume** — paste doesn't trigger search (~30min)
+4. **Add date filters to job search** — posted within (24h, 3d, 7d, 30d) (~30min)
+5. **Improve API provider integration** — per-source timeouts (cut slow sources at 5-8s), retry with fallback if one fails, cache recent search results in localStorage, consider Vercel serverless functions for edge network speed (~1h)
+6. **Notion integration guide** — add tips/docs in-app on using Notion DB with job hunting (~30min)
+7. **Bug sweep** — test all features, fix edge cases (~1h)
 
-### Completed
+### Completed (this session — May 2026)
+- Modern design refresh (#7): bold/minimal/square buttons nivisgear-inspired, all border-radius→0, heavier typography
+- View uploaded resume in-app (#6): Preview button opens original PDF in new tab
+- Free hosting setup (#4): render.yaml, start:prod script, Express serves built frontend in production
+- Mobile-friendly responsive UI (#8): bottom nav with 6 tabs, active indicator bar, tab label in mobile header, compact cards, fadeSlideIn transitions
+- Vercel deployment: api/index.js, vercel.json, guarded server listen/static serving
+- Apify search: 12s timeout per actor, 3 fallback actors with independent timeouts
+- YC search: 8s timeout
+- Date filter: dropdown (24h, 3d, 7d, 30d) for JSearch + Adzuna
+- Per-source timeouts added: JSearch (8s), Apify (12s), YC (8s), Adzuna (8s), Jooble (8s), Jobicy (8s)
+- Notion proxy timeout: AbortSignal.timeout(15000)
+- Resume AI parser timeouts: AbortSignal.timeout(20000) on OpenAI/Claude/Gemini
+- localStorage search cache: 5-min TTL, keyed by query+source+location+remote_only+date_posted+job_type
+- Notion tips documentation: collapsible guide in Settings with 6 job-hunt tips
+- Bug sweep: fixed 16 issues (5 high, 11 medium) including auto-search from paste, Apify race condition, empty cache, date_posted/Adzuna key validation, API 404 handler, misleading empty state, Notion toggle premature save
+
+### Previously Completed
+- Adzuna, Jooble, Jobicy, Claude, Gemini added as API providers in Settings with (needs key)/(free) badges
+- Fixed YC Jobs search (dead endpoint → live api.ycombinator.com/v0.1/companies)
+- Fixed Apify search (removed actor → santamaria-automations/indeed-scraper)
+- Direct Apply button on search results (opens URL + auto-saves job)
+- Email extraction from job descriptions + mailto: apply + free email scraper endpoint
+- LinkedIn URL detection → blue "Apply on LinkedIn" + "Find Emails" button
+- Full bug sweep: 31 bugs fixed (null checks, response.json() safety, localStorage wrappers, division-by-zero guard, URL.revokeObjectURL timing)
 - ResumeView: progress steps, URL extraction, portfolio score, better loading
-- Work arrangement toggle (Remote/Hybrid/Office)
-- Onboarding wizard (5-step)
-- Notion integration (toggle in Settings, CORS proxy via Express)
-- ATS export, skill gap, keyword optimization
-- Vite proxy for clean dev
-- Fixed: onboarding resume check, HTML entities in JSX, Notion CORS, Dashboard fragment
+- Work arrangement toggle (Remote/Hybrid/Office), Onboarding wizard (5-step)
+- Notion integration (toggle, CORS proxy), ATS export, skill gap, keyword optimization
+- Vite proxy, Logo rebrand, AGENTS.md
+
+### Notes
+- Remote100K, HiringCafe, Wellfound, Contra, NoDesk, LinkedIn, Arc are UI/UX design inspiration only (not API integrations)
+- Express v5 uses path-to-regexp v8 (`{*splat}` not `*`)
+- `.env` is gitignored — keys go in Settings UI or `.env` for server-side

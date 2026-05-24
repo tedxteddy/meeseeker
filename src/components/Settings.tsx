@@ -8,18 +8,32 @@ interface SettingsProps {
 }
 
 const API_PROVIDERS = [
-  { key: 'jsearch', label: 'JSearch (RapidAPI)', placeholder: 'Your RapidAPI key', help: 'Free 500 searches/month. Get from rapidapi.com', link: 'https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch' },
-  { key: 'apify', label: 'Apify (Indeed Scraper)', placeholder: 'apify_api_...', help: 'Scrapes Indeed listings. Get from console.apify.com', link: 'https://console.apify.com/account#/integrations' },
-  { key: 'openai', label: 'OpenAI (Resume AI)', placeholder: 'sk-proj-...', help: 'AI-powered resume parsing. Optional — local parser works without it.', link: 'https://platform.openai.com/api-keys' },
+  { key: 'jsearch', label: 'JSearch (RapidAPI)', placeholder: 'Your RapidAPI key', help: 'Free 500 searches/month. Get from rapidapi.com', link: 'https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch', badge: '(needs key)', free: false },
+  { key: 'apify', label: 'Apify (Indeed Scraper)', placeholder: 'apify_api_...', help: 'Scrapes Indeed listings. Get from console.apify.com', link: 'https://console.apify.com/account#/integrations', badge: '(needs key)', free: false },
+  { key: 'linkedin', label: 'LinkedIn Jobs (via Apify)', placeholder: '', help: 'Scrapes LinkedIn listings using your Apify API key.', link: 'https://console.apify.com/account#/integrations', badge: '(uses Apify key)', free: true },
+  { key: 'openai', label: 'OpenAI (Resume AI)', placeholder: 'sk-proj-...', help: 'AI-powered resume parsing.', link: 'https://platform.openai.com/api-keys', badge: '(needs key)', free: false },
+  { key: 'adzuna', label: 'Adzuna', placeholder: 'app_id:app_key', help: 'Free tier available (50 calls/day). Get from developer.adzuna.com', link: 'https://developer.adzuna.com/account', badge: '(needs key)', free: false },
+  { key: 'jooble', label: 'Jooble', placeholder: 'Your Jooble API key', help: 'Free 100 searches/day. Get from jooble.org/api', link: 'https://jooble.org/api', badge: '(needs key)', free: false },
+  { key: 'jobicy', label: 'Jobicy (Remote Jobs)', placeholder: '', help: 'Free remote job listings, no API key required.', link: 'https://jobicy.com/api/v2/remote-jobs', badge: '(free)', free: true },
+  { key: 'claude', label: 'Claude (Anthropic)', placeholder: 'sk-ant-...', help: 'AI resume analysis. Get from console.anthropic.com', link: 'https://console.anthropic.com/', badge: '(needs key)', free: false },
+  { key: 'gemini', label: 'Gemini (Google AI)', placeholder: 'AIza...', help: 'AI resume analysis. Get from aistudio.google.com', link: 'https://aistudio.google.com/apikey', badge: '(needs key)', free: false },
 ]
+
+function getStored(key: string, fallback = '') {
+  try { return localStorage.getItem(key) || fallback } catch { return fallback }
+}
 
 export default function Settings({ onClose, onNotionSync }: SettingsProps) {
   const status = getApiKeyStatus()
   const notionConfig = getNotionConfig()
   const [values, setValues] = useState({
-    jsearch: localStorage.getItem('api_jsearch') || '',
-    apify: localStorage.getItem('api_apify') || '',
-    openai: localStorage.getItem('api_openai') || '',
+    jsearch: getStored('api_jsearch'),
+    apify: getStored('api_apify'),
+    openai: getStored('api_openai'),
+    adzuna: getStored('api_adzuna'),
+    jooble: getStored('api_jooble'),
+    claude: getStored('api_claude'),
+    gemini: getStored('api_gemini'),
   })
   const [notion, setNotion] = useState({
     enabled: notionConfig.enabled,
@@ -51,7 +65,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
   function handleNotionToggle(enabled: boolean) {
     const newNotion = { ...notion, enabled }
     setNotion(newNotion)
-    saveNotionConfig(newNotion)
+    try { localStorage.setItem('notion_enabled', String(enabled)) } catch { /* ignore */ }
     if (enabled && onNotionSync) onNotionSync()
   }
 
@@ -61,7 +75,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
     }} onClick={onClose}>
       <div style={{
-        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16,
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 0,
         padding: 28, maxWidth: 580, width: '100%', maxHeight: '90vh', overflow: 'auto',
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -69,7 +83,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-2)', fontSize: 20, cursor: 'pointer' }}>&times;</button>
         </div>
 
-        <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', padding: 4, borderRadius: 10 }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', padding: 4, borderRadius: 0 }}>
           {[
             { key: 'keys', label: 'API Keys', icon: '&#128273;' },
             { key: 'notion', label: 'Notion', icon: '&#128203;' },
@@ -79,7 +93,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
               key={tab.key}
               onClick={() => setActiveTab(tab.key as typeof activeTab)}
               style={{
-                flex: 1, padding: '8px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 500,
+                flex: 1, padding: '8px 12px', borderRadius: 0, border: 'none', fontSize: 12, fontWeight: 500,
                 fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.15s',
                 background: activeTab === tab.key ? 'var(--accent)' : 'transparent',
                 color: activeTab === tab.key ? '#fff' : 'var(--text-2)',
@@ -98,29 +112,36 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
             {API_PROVIDERS.map(provider => (
               <div key={provider.key} style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{provider.label}</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+                    {provider.label}{' '}
+                    <span style={{ fontSize: 10, color: provider.free ? 'var(--green)' : 'var(--text-2)', fontWeight: 400 }}>
+                      {provider.badge}
+                    </span>
+                  </label>
                   <span style={{
-                    fontSize: 10, padding: '2px 8px', borderRadius: 12,
-                    background: status[provider.key as keyof typeof status] ? 'rgba(0,214,143,0.15)' : 'rgba(238,90,111,0.15)',
-                    color: status[provider.key as keyof typeof status] ? 'var(--green)' : 'var(--red)',
+                    fontSize: 10, padding: '2px 8px', borderRadius: 0,
+                    background: provider.free ? 'rgba(0,214,143,0.15)' : (status[provider.key as keyof typeof status] ? 'rgba(0,214,143,0.15)' : 'rgba(238,90,111,0.15)'),
+                    color: provider.free ? 'var(--green)' : (status[provider.key as keyof typeof status] ? 'var(--green)' : 'var(--red)'),
                   }}>
-                    {status[provider.key as keyof typeof status] ? 'Connected' : 'Not set'}
+                    {provider.free ? 'Free' : (status[provider.key as keyof typeof status] ? 'Connected' : 'Not set')}
                   </span>
                 </div>
-                <input
-                  type="password"
-                  value={values[provider.key as keyof typeof values]}
-                  onChange={e => setValues(prev => ({ ...prev, [provider.key]: e.target.value }))}
-                  placeholder={provider.placeholder}
-                  style={{
-                    width: '100%', padding: '8px 12px', borderRadius: 8,
-                    border: '1px solid var(--border)', background: 'var(--bg)',
-                    color: 'var(--text)', fontFamily: 'inherit', fontSize: 12, outline: 'none',
-                  }}
-                />
+                {!provider.free && (
+                  <input
+                    type="password"
+                    value={values[provider.key as keyof typeof values] || ''}
+                    onChange={e => setValues(prev => ({ ...prev, [provider.key]: e.target.value }))}
+                    placeholder={provider.placeholder}
+                    style={{
+                      width: '100%', padding: '8px 12px', borderRadius: 0,
+                      border: '1px solid var(--border)', background: 'var(--bg)',
+                      color: 'var(--text)', fontFamily: 'inherit', fontSize: 12, outline: 'none',
+                    }}
+                  />
+                )}
                 <p style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>
                   {provider.help}{' '}
-                  <a href={provider.link} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>Get key &rarr;</a>
+                  {!provider.free && <a href={provider.link} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>Get key &rarr;</a>}
                 </p>
               </div>
             ))}
@@ -155,7 +176,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
 
               <div style={{
                 padding: '12px', background: notion.enabled ? 'rgba(0,214,143,0.08)' : 'var(--surface-2)',
-                borderRadius: 10, border: `1px solid ${notion.enabled ? 'rgba(0,214,143,0.3)' : 'var(--border)'}`,
+                borderRadius: 0, border: `1px solid ${notion.enabled ? 'rgba(0,214,143,0.3)' : 'var(--border)'}`,
                 opacity: notion.enabled ? 1 : 0.6, transition: 'all 0.2s'
               }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>
@@ -168,7 +189,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
                   placeholder="secret_..."
                   disabled={!notion.enabled}
                   style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 6,
+                    width: '100%', padding: '8px 10px', borderRadius: 0,
                     border: '1px solid var(--border)', background: 'var(--bg)',
                     color: 'var(--text)', fontFamily: 'inherit', fontSize: 12, outline: 'none',
                     marginBottom: 12
@@ -184,7 +205,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
                   placeholder="32-character database ID from your Notion database URL"
                   disabled={!notion.enabled}
                   style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 6,
+                    width: '100%', padding: '8px 10px', borderRadius: 0,
                     border: '1px solid var(--border)', background: 'var(--bg)',
                     color: 'var(--text)', fontFamily: 'inherit', fontSize: 12, outline: 'none',
                   }}
@@ -205,7 +226,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
 
               {verifyResult && (
                 <div style={{
-                  marginTop: 10, padding: '8px 12px', borderRadius: 8, fontSize: 12,
+                  marginTop: 10, padding: '8px 12px', borderRadius: 0, fontSize: 12,
                   background: verifyResult.success ? 'rgba(0,214,143,0.15)' : 'rgba(238,90,111,0.15)',
                   color: verifyResult.success ? 'var(--green)' : 'var(--red)'
                 }}>
@@ -214,7 +235,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
               )}
             </div>
 
-            <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: 14 }}>
+            <div style={{ background: 'var(--surface-2)', borderRadius: 0, padding: 14, marginBottom: 12 }}>
               <h4 style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Database Properties Required</h4>
               <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>
                 Create these properties in your Notion database:
@@ -227,6 +248,20 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
                 ))}
               </div>
             </div>
+
+            <details style={{ fontSize: 11, color: 'var(--text-2)', cursor: 'pointer' }}>
+              <summary style={{ fontWeight: 600, fontSize: 12, marginBottom: 6, color: 'var(--text)' }}>
+                &#128161; Notion Job Hunt Tips
+              </summary>
+              <div style={{ padding: '10px 0', lineHeight: 1.6 }}>
+                <p><strong>Track everything in one place.</strong> Use Meeseeker to push jobs and applications to Notion, so all your research lives alongside your notes, interview prep, and networking contacts.</p>
+                <p><strong>Create views for each stage.</strong> In Notion, create linked database views filtered by Stage: "To Apply", "Applied", "Interviewing", "Offer", "Rejected". Quick way to see your pipeline at a glance.</p>
+                <p><strong>Use Tags for company research.</strong> The Tags multi-select helps you categorize — e.g. "startup", "fintech", "series-a", "remote-friendly". Then filter your database by tag to find similar roles.</p>
+                <p><strong>Automate with formulas.</strong> Add a formula property to calculate days since Applied Date, or auto-assign a "Priority" based on Fit Score &times; Probability. Keeps you focused on the best opportunities.</p>
+                <p><strong>Share with your network.</strong> Share your Notion database view with a mentor or peer for visibility into your search. A shared read-only link works great for accountability.</p>
+                <p><strong>Complement with templates.</strong> Use a Notion job hunt template as your base, then map the columns to match the properties above. Many free templates are available on Notion's template gallery.</p>
+              </div>
+            </details>
           </>
         )}
 
@@ -245,13 +280,13 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
                 ].map(option => (
                   <label key={option.id} style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-                    background: 'var(--surface-2)', borderRadius: 8, cursor: 'pointer', fontSize: 12
+                    background: 'var(--surface-2)', borderRadius: 0, cursor: 'pointer', fontSize: 12
                   }}>
                     <input
                       type="radio"
                       name="syncMode"
-                      checked={localStorage.getItem('notion_sync_mode') === option.id || (!localStorage.getItem('notion_sync_mode') && option.id === 'manual')}
-                      onChange={() => localStorage.setItem('notion_sync_mode', option.id)}
+                      checked={getStored('notion_sync_mode') === option.id || (!getStored('notion_sync_mode') && option.id === 'manual')}
+                      onChange={() => { try { localStorage.setItem('notion_sync_mode', option.id) } catch { /* ignore */ } }}
                     />
                     <div>
                       <strong style={{ display: 'block' }}>{option.label}</strong>
@@ -262,7 +297,7 @@ export default function Settings({ onClose, onNotionSync }: SettingsProps) {
               </div>
             </div>
 
-            <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: 14 }}>
+            <div style={{ background: 'var(--surface-2)', borderRadius: 0, padding: 14 }}>
               <h4 style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Sync Now</h4>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-outline btn-sm" onClick={() => onNotionSync?.()}>

@@ -70,7 +70,8 @@ function load(): StoredData {
 }
 
 function save(data: StoredData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) }
+  catch (err) { console.error('localStorage save failed:', err) }
 }
 
 function getDefaults(): StoredData {
@@ -155,13 +156,13 @@ export const store = {
   },
   saveResume: (resume: Omit<Resume, 'id'>) => {
     const data = load()
-    const newResume = { 
-      ...resume, 
+    const newResume = {
+      ...resume,
       id: `resume-${Date.now()}`,
-      version: 1,
-      is_active: true,
-      parent_id: null,
-      tags: []
+      version: resume.version ?? 1,
+      is_active: resume.is_active ?? true,
+      parent_id: resume.parent_id ?? null,
+      tags: resume.tags ?? [],
     }
     data.resumes.push(newResume)
     save(data)
